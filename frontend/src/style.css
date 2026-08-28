@@ -1,0 +1,35 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000011;
+  font-family: 'Courier New', monospace;
+}
+
+#globeViz {
+  width: 100vw;
+  height: 100vh;
+}
+
+#hud {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  color: #00ff9c;
+  pointer-events: none;
+  text-shadow: 0 0 8px rgba(0, 255, 156, 0.6);
+}
+
+#hud h1 {
+  font-size: 1.4rem;
+  letter-spacing: 3px;
+  margin: 0 0 4px 0;
+}
+
+#hud p {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin: 0;
+}
