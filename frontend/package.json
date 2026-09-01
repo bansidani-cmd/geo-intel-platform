@@ -12,6 +12,7 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
-    "globe.gl": "^2.46.2"
+    "globe.gl": "^2.46.2",
+    "three": "^0.185.1"
   }
 }

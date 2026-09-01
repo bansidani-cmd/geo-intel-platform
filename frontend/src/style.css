@@ -4,8 +4,9 @@ html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #000011;
-  font-family: 'Courier New', monospace;
+  background: #000000;
+  font-family: 'Share Tech Mono', monospace;
+  color: #b8fff0;
 }
 
 #globeViz {
@@ -13,23 +14,320 @@ html, body {
   height: 100vh;
 }
 
+/* Subtle CRT scanline overlay for the surveillance-terminal feel */
+#scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 255, 200, 0.012) 0px,
+    rgba(0, 255, 200, 0.012) 1px,
+    transparent 1px,
+    transparent 6px
+  );
+  opacity: 0.5;
+}
+
 #hud {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  color: #00ff9c;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
   pointer-events: none;
-  text-shadow: 0 0 8px rgba(0, 255, 156, 0.6);
+  padding: 12px 18px;
+  border-left: 2px solid #00ffc8;
+  background: linear-gradient(90deg, rgba(0, 255, 200, 0.08), transparent);
 }
 
 #hud h1 {
-  font-size: 1.4rem;
-  letter-spacing: 3px;
-  margin: 0 0 4px 0;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: 4px;
+  margin: 0 0 6px 0;
+  color: #00ffc8;
+  text-shadow: 0 0 12px rgba(0, 255, 200, 0.8);
 }
 
 #hud p {
-  font-size: 0.85rem;
-  opacity: 0.8;
+  font-size: 0.82rem;
   margin: 0;
+  color: #7ef6d8;
+  letter-spacing: 0.5px;
+}
+
+#legend {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 10;
+  background: rgba(4, 12, 14, 0.7);
+  border: 1px solid rgba(0, 255, 200, 0.25);
+  padding: 12px 16px;
+  min-width: 150px;
+  backdrop-filter: blur(2px);
+}
+
+.legend-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 3px;
+  color: #00ffc8;
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+
+#legend label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8rem;
+  color: #cdfff2;
+}
+
+#legend input[type="checkbox"] {
+  accent-color: #00ffc8;
+  cursor: pointer;
+}
+
+#legend .swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* Click-to-inspect side panel */
+#infoPanel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 320px;
+  z-index: 20;
+  background: rgba(3, 10, 12, 0.92);
+  border-left: 1px solid rgba(0, 255, 200, 0.35);
+  box-shadow: -20px 0 40px rgba(0, 0, 0, 0.5);
+  padding: 24px 20px;
+  transition: transform 0.25s ease;
+  backdrop-filter: blur(4px);
+}
+
+#infoPanel.hidden {
+  transform: translateX(100%);
+}
+
+#closePanel {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: none;
+  border: 1px solid rgba(0, 255, 200, 0.4);
+  color: #00ffc8;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+#infoPanelContent .panel-type {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 3px;
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+#infoPanelContent .panel-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.05rem;
+  color: #00ffc8;
+  text-shadow: 0 0 10px rgba(0, 255, 200, 0.6);
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 255, 200, 0.2);
+}
+
+#infoPanelContent .panel-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  margin: 10px 0;
+  color: #cdfff2;
+}
+
+#infoPanelContent .panel-row .label {
+  opacity: 0.55;
+}
+
+/* Track list panel */
+#trackListToggle {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 15;
+  background: rgba(4, 12, 14, 0.8);
+  border: 1px solid rgba(0, 255, 200, 0.4);
+  color: #00ffc8;
+  font-family: 'Share Tech Mono', monospace;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+#trackListToggle:hover {
+  background: rgba(0, 255, 200, 0.15);
+}
+
+#trackListPanel {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 16;
+  width: 380px;
+  height: 60vh;
+  max-height: 600px;
+  background: rgba(3, 10, 12, 0.94);
+  border: 1px solid rgba(0, 255, 200, 0.35);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(4px);
+}
+
+#trackListPanel.hidden {
+  display: none;
+}
+
+.tl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 255, 200, 0.25);
+  color: #00ffc8;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+}
+
+.tl-header button {
+  background: none;
+  border: 1px solid rgba(0, 255, 200, 0.4);
+  color: #00ffc8;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+#tlSearch, #tlFilter {
+  margin: 10px 16px 0 16px;
+  padding: 8px 10px;
+  background: rgba(0, 255, 200, 0.05);
+  border: 1px solid rgba(0, 255, 200, 0.25);
+  color: #cdfff2;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem;
+}
+
+#tlSearch { width: calc(100% - 52px); }
+#tlFilter { width: calc(100% - 32px); }
+
+#tlCount {
+  padding: 8px 16px 4px 16px;
+  font-size: 0.7rem;
+  opacity: 0.5;
+  color: #cdfff2;
+}
+
+#tlList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 12px 8px;
+}
+
+.tl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px;
+  cursor: pointer;
+  font-size: 0.76rem;
+  color: #cdfff2;
+  border-bottom: 1px solid rgba(0, 255, 200, 0.08);
+}
+
+.tl-row:hover {
+  background: rgba(0, 255, 200, 0.08);
+}
+
+.tl-row .tl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 5px currentColor;
+}
+
+.tl-row .tl-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-row .tl-meta {
+  opacity: 0.5;
+  font-size: 0.68rem;
+}
+
+#healthPanel {
+    position: absolute !important;
+    right: 24px !important;
+    bottom: 24px !important;
+
+    width: 160px !important;
+    height: 190px !important;
+
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    padding: 10px 12px !important;
+
+    background: rgba(4, 12, 14, 0.85) !important;
+    border: 1px solid rgba(0, 255, 200, 0.3) !important;
+
+    color: #cdfff2 !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    font-size: 0.65rem !important;
+    line-height: 1.2 !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+
+    text-align: left !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+}
+
+#healthPanel > div {
+    display: flex !important;
+    align-items: center !important;
+
+    width: 125px !important;
+    height: 17px !important;
+
+    margin: 0 !important;
+    padding: 0 !important;
+
+    white-space: nowrap !important;
 }
