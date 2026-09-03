@@ -1,4 +1,5 @@
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -60,7 +61,7 @@ html, body {
 
 #legend {
   position: absolute;
-  top: 24px;
+  top: 100px;
   right: 24px;
   z-index: 10;
   background: rgba(4, 12, 14, 0.7);
@@ -90,7 +91,7 @@ html, body {
   color: #cdfff2;
 }
 
-#legend input[type="checkbox"] {
+#legend input[type='checkbox'] {
   accent-color: #00ffc8;
   cursor: pointer;
 }
@@ -173,7 +174,7 @@ html, body {
   bottom: 24px;
   left: 24px;
   z-index: 15;
-  background: rgba(4, 12, 14, 0.8);
+  background: rgba(0, 0, 0, 0.8);
   border: 1px solid rgba(0, 255, 200, 0.4);
   color: #00ffc8;
   font-family: 'Share Tech Mono', monospace;
@@ -185,6 +186,134 @@ html, body {
 
 #trackListToggle:hover {
   background: rgba(0, 255, 200, 0.15);
+}
+
+#solarModeToggle {
+  position: absolute;
+  bottom: 24px;
+  left: 190px;
+  z-index: 15;
+  display: flex;
+  gap: 2px;
+}
+
+#solarControls {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  transform: translateY(-50%);
+
+  z-index: 15;
+
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+
+  width: 190px;
+  padding: 12px;
+
+  background: rgba(5, 10, 20, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+
+  color: white;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+#solarControls .solar-control-title {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+#solarControls label {
+  grid-column: 1 / -1;
+
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+
+  font-size: 10px;
+}
+
+#solarControls input[type="range"] {
+  width: 100%;
+}
+
+.solar-control-btn {
+  width: 100%;
+  padding: 7px 4px;
+
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+
+  color: white;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 9px;
+
+  cursor: pointer;
+}
+
+.solar-control-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#solarControls .solar-control-title {
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+#solarControls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+#solarControls input[type="range"] {
+  width: 100px;
+}
+
+.solar-control-btn {
+  padding: 6px 9px;
+
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+
+  color: white;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+.solar-control-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.mode-btn {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(0, 255, 200, 0.4);
+  color: #7ef6d8;
+  font-family: 'Share Tech Mono', monospace;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.mode-btn:hover {
+  background: rgba(0, 255, 200, 0.15);
+}
+
+.mode-btn.active {
+  background: rgba(0, 255, 200, 0.25);
+  color: #00ffc8;
+  text-shadow: 0 0 8px rgba(0, 255, 200, 0.6);
 }
 
 #trackListPanel {
@@ -205,6 +334,18 @@ html, body {
 
 #trackListPanel.hidden {
   display: none;
+}
+
+#trackListPanel select {
+  background: rgba(0, 0, 0, 0.9);
+  color: #00ffc8;
+  border: 1px solid rgba(0, 255, 200, 0.4);
+  font-family: 'Share Tech Mono', monospace;
+}
+
+#trackListPanel select option {
+  background: #000;
+  color: #00ffc8;
 }
 
 .tl-header {
@@ -228,7 +369,8 @@ html, body {
   cursor: pointer;
 }
 
-#tlSearch, #tlFilter {
+#tlSearch,
+#tlFilter {
   margin: 10px 16px 0 16px;
   padding: 8px 10px;
   background: rgba(0, 255, 200, 0.05);
@@ -238,8 +380,12 @@ html, body {
   font-size: 0.78rem;
 }
 
-#tlSearch { width: calc(100% - 52px); }
-#tlFilter { width: calc(100% - 32px); }
+#tlSearch {
+  width: calc(100% - 52px);
+}
+#tlFilter {
+  width: calc(100% - 32px);
+}
 
 #tlCount {
   padding: 8px 16px 4px 16px;
@@ -290,44 +436,241 @@ html, body {
 }
 
 #healthPanel {
-    position: absolute !important;
-    right: 24px !important;
-    bottom: 24px !important;
+  position: absolute !important;
+  right: 24px !important;
+  bottom: 24px !important;
 
-    width: 160px !important;
-    height: 190px !important;
+  width: 160px !important;
+  height: 190px !important;
 
-    box-sizing: border-box !important;
-    margin: 0 !important;
-    padding: 10px 12px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 10px 12px !important;
 
-    background: rgba(4, 12, 14, 0.85) !important;
-    border: 1px solid rgba(0, 255, 200, 0.3) !important;
+  background: rgba(4, 12, 14, 0.85) !important;
+  border: 1px solid rgba(0, 255, 200, 0.3) !important;
 
-    color: #cdfff2 !important;
-    font-family: 'Share Tech Mono', monospace !important;
-    font-size: 0.65rem !important;
-    line-height: 1.2 !important;
+  color: #cdfff2 !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.65rem !important;
+  line-height: 1.2 !important;
 
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: center !important;
 
-    text-align: left !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
 }
 
 #healthPanel > div {
-    display: flex !important;
-    align-items: center !important;
+  display: flex !important;
+  align-items: center !important;
 
-    width: 125px !important;
-    height: 17px !important;
+  width: 125px !important;
+  height: 17px !important;
 
-    margin: 0 !important;
-    padding: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 
-    white-space: nowrap !important;
+  white-space: nowrap !important;
+}
+
+#solarBodyInfo {
+  position: fixed;
+  top: 50%;
+  right: 24px;
+
+  width: 260px;
+  box-sizing: border-box;
+
+  opacity: 0;
+  transform: translateY(-50%) translateX(20px);
+
+  pointer-events: none;
+
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+
+  z-index: 1000;
+}
+
+#solarInfoVelocity {
+  white-space: pre-line;
+}
+
+#solarBodyInfo.visible {
+  opacity: 1;
+
+  transform:
+    translateY(-50%)
+    translateX(0);
+
+  pointer-events: auto;
+}
+
+.solar-info-header {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  margin-bottom: 4px;
+}
+
+#solarInfoName {
+  font-size: 24px;
+
+  font-weight: 700;
+}
+
+#solarInfoClose {
+  width: 28px;
+  height: 28px;
+
+  border: none;
+
+  background: transparent;
+
+  color: #ffffff;
+
+  font-size: 24px;
+
+  cursor: pointer;
+
+  opacity: 0.7;
+}
+
+#solarInfoClose:hover {
+  opacity: 1;
+}
+
+.solar-info-type {
+  font-size: 13px;
+
+  color: #8fb9e8;
+
+  margin-bottom: 18px;
+}
+
+.solar-info-grid {
+  display: grid;
+
+  grid-template-columns:
+    1fr 1fr;
+
+  gap: 14px;
+}
+
+.solar-info-grid div {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+.solar-info-grid span {
+  font-size: 11px;
+
+  color: rgba(255, 255, 255, 0.55);
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.05em;
+}
+
+.solar-info-grid strong {
+  font-size: 13px;
+
+  font-weight: 600;
+}
+
+/* Hide Earth dashboard panels in Solar System mode */
+
+body.solar-mode #legend,
+body.solar-mode #trackListToggle,
+body.solar-mode #trackListPanel,
+body.solar-mode #healthPanel {
+  display: none !important;
+}
+
+body:not(.solar-mode) #solarControls {
+  display: none !important;
+}
+
+.solar-info-scale {
+  margin-top: 12px;
+  padding-top: 10px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+
+  font-size: 9px;
+  line-height: 1.4;
+  opacity: 0.65;
+}
+
+.solar-info-scale strong {
+  display: block;
+  margin-bottom: 3px;
+
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+
+#solarInfoVelocity {
+  white-space: pre-line;
+}
+
+.solar-data-status {
+  grid-column: 1 / -1;
+
+  margin-top: 4px;
+  padding-top: 8px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+
+  font-size: 8px;
+  line-height: 1.6;
+  opacity: 0.55;
+  text-align: center;
+}
+
+.journey-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.journey-title {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+  opacity: 0.75;
+}
+
+.journey-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.journey-progress {
+  height: 100%;
+  background: #ffffff;
+  border-radius: 3px;
+transition: none;}
+
+.journey-percent {
+  margin-top: 6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-align: right;
+  opacity: 0.7;
 }

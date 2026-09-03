@@ -6,6 +6,7 @@ import time
 from contextlib import asynccontextmanager
 import xml.etree.ElementTree as ET
 
+
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -14,7 +15,18 @@ import websockets
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from solar_system import get_solar_system
 
+from mission_trajectories import (
+    HISTORICAL_MISSIONS,
+    get_mission_trajectory,
+    interpolate_trajectory_position,
+) 
+
+from mission_engine import (
+    get_mission_state,
+    datetime_to_julian_date,
+)
 
 from sample_events import SAMPLE_EVENTS_GEOJSON
 
@@ -86,7 +98,10 @@ TLE_MIRROR_SATELLITES = {
 
 SATELLITE_MAX = 500
 
-LAUNCH_LIBRARY_URL = "https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=15&mode=normal"
+LAUNCH_LIBRARY_URL = LAUNCH_LIBRARY_URL = (
+    "https://lldev.thespacedevs.com/2.3.0/launches/upcoming/"
+    "?limit=100&mode=normal"
+)
 FIRMS_MAP_KEY = os.getenv("FIRMS_MAP_KEY")
 EVENT_REGISTRY_API_KEY = os.getenv("EVENT_REGISTRY_API_KEY")
 FIRMS_URL = "https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/world/1"
@@ -147,46 +162,196 @@ fires: list[dict] = []
 
 async def ais_listener():
     if not AISSTREAM_API_KEY:
-        print("WARNING: AISSTREAM_API_KEY not set in .env, skipping AIS listener.")
+        print(
+            "WARNING: AISSTREAM_API_KEY not set in .env, "
+            "skipping AIS listener."
+        )
         return
+
     while True:
         try:
-            async with websockets.connect("wss://stream.aisstream.io/v0/stream") as ws:
+            async with websockets.connect(
+                "wss://stream.aisstream.io/v0/stream"
+            ) as ws:
                 subscribe_message = {
                     "APIKey": AISSTREAM_API_KEY,
                     "BoundingBoxes": [WORLD_BOX],
-                    "FilterMessageTypes": ["PositionReport"],
+                    "FilterMessageTypes": [
+                        "PositionReport",
+                        "ShipStaticData",
+                    ],
                 }
-                await ws.send(json.dumps(subscribe_message))
-                print("Connected to AISStream, subscribed to the WHOLE WORLD.")
+
+                await ws.send(
+                    json.dumps(subscribe_message)
+                )
+
+                print(
+                    "Connected to AISStream, "
+                    "subscribed to the WHOLE WORLD."
+                )
+
                 mark_health("aisstream", True)
 
                 while True:
                     try:
-                        raw_message = await asyncio.wait_for(ws.recv(), timeout=30)
+                        raw_message = await asyncio.wait_for(
+                            ws.recv(),
+                            timeout=30,
+                        )
+
                     except asyncio.TimeoutError:
-                        print("AIS: no messages in 30s, assuming dead connection, reconnecting...")
+                        print(
+                            "AIS: no messages in 30s, "
+                            "assuming dead connection, "
+                            "reconnecting..."
+                        )
                         break
 
                     data = json.loads(raw_message)
-                    if data.get("MessageType") == "PositionReport":
-                        meta = data["MetaData"]
-                        report = data.get("Message", {}).get("PositionReport", {})
-                        mmsi = str(meta["MMSI"])
+
+                    message_type = data.get("MessageType")
+
+                    meta = data.get("MetaData", {})
+
+                    message = data.get("Message", {})
+
+                    if not meta.get("MMSI"):
+                        continue
+
+                    mmsi = str(meta["MMSI"])
+
+                    # Make sure a vessel record exists
+                    if mmsi not in ships:
                         ships[mmsi] = {
                             "mmsi": mmsi,
-                            "name": (meta.get("ShipName") or "Unknown vessel").strip(),
-                            "lat": meta["latitude"],
-                            "lon": meta["longitude"],
-                            "heading": report.get("TrueHeading") or report.get("Cog"),
+                            "name": "Unknown vessel",
+                            "imo": None,
+                            "ship_type": None,
+                            "destination": None,
+                            "eta": None,
+                            "draught": None,
+                            "lat": None,
+                            "lon": None,
+                            "speed": None,
+                            "course": None,
+                            "heading": None,
+                            "navigation_status": None,
                             "last_seen": time.time(),
                         }
-                        push_history(ship_history, mmsi, meta["latitude"], meta["longitude"])
-        except Exception as e:
-            mark_health("aisstream", False, str(e))
-            print(f"AIS connection error ({e}), retrying in 10s...")
-            await asyncio.sleep(10)
 
+                    ship = ships[mmsi]
+
+                    # POSITION REPORT # 
+                    if message_type == "PositionReport":
+                        report = message.get(
+                            "PositionReport",
+                            {},
+                        )
+
+                        ship["lat"] = meta.get("latitude")
+
+                        ship["lon"] = meta.get("longitude")
+
+                        # Speed over ground (knots)
+                        ship["speed"] = report.get("Sog")
+
+                        # Course over ground (degrees)
+                        ship["course"] = report.get("Cog")
+
+                        # True heading
+                        true_heading = report.get("TrueHeading")
+
+                        if (
+                            true_heading is not None
+                            and true_heading < 360
+                        ):
+                            ship["heading"] = true_heading
+                        else:
+                            ship["heading"] = report.get("Cog")
+
+                        # Navigation status
+                        ship["navigation_status"] = report.get(
+                            "NavigationalStatus"
+                        )
+
+                        ship["last_seen"] = time.time()
+
+                        # Keep existing history system
+                        if (
+                            ship["lat"] is not None
+                            and ship["lon"] is not None
+                        ):
+                            push_history(
+                                ship_history,
+                                mmsi,
+                                ship["lat"],
+                                ship["lon"],
+                            )
+
+                    # -----------------------------------------
+                    # STATIC / VOYAGE DATA
+                    # -----------------------------------------
+                    elif message_type == "ShipStaticData":
+                        static = message.get(
+                            "ShipStaticData",
+                            {},
+                        )
+
+                        # Vessel name
+                        name = static.get("Name")
+
+                        if name:
+                            ship["name"] = name.strip()
+
+                        # IMO number
+                        imo = static.get("ImoNumber")
+
+                        if imo:
+                            ship["imo"] = imo
+
+                        # Ship type
+                        ship["ship_type"] = static.get("Type")
+
+                        # Destination
+                        destination = static.get("Destination")
+
+                        if destination:
+                            ship["destination"] = destination.strip()
+
+                        # Draught
+                        ship["draught"] = static.get(
+                            "MaximumStaticDraught"
+                        )
+
+                        # ETA
+                        ship["eta"] = static.get("Eta")
+
+                        # AIS metadata can also contain
+                        # the vessel name
+                        meta_name = meta.get("ShipName")
+
+                        if (
+                            meta_name
+                            and ship["name"] == "Unknown vessel"
+                        ):
+                            ship["name"] = meta_name.strip()
+
+                        ship["last_seen"] = time.time()
+
+        except Exception as e:
+            mark_health(
+                "aisstream",
+                False,
+                str(e),
+            )
+
+            print(
+                f"AIS connection error ({e}), "
+                "retrying in 10s..."
+            )
+
+            await asyncio.sleep(10)
 
 async def reliefweb_events():
     async with httpx.AsyncClient(
@@ -374,7 +539,7 @@ async def satellite_tle_poller():
                 try:
                     resp = await client.get(
                         CELESTRAK_URL_TEMPLATE.format(
-                            group=group()
+                            group=group
                         )
                     )
 
@@ -659,32 +824,107 @@ async def tle_mirror_poller():
 
 
 async def launch_poller():
-    async with httpx.AsyncClient(timeout=15, headers=BROWSER_HEADERS) as client:
+    async with httpx.AsyncClient(
+        timeout=15,
+        headers=BROWSER_HEADERS,
+    ) as client:
+
         while True:
             try:
-                resp = await client.get(LAUNCH_LIBRARY_URL)
-                resp.raise_for_status()
-                data = resp.json()
                 new_launches = []
-                for l in data.get("results", []):
-                    pad = l.get("pad", {})
-                    loc = pad.get("location", {})
-                    new_launches.append({
-                        "name": l.get("name"), "net": l.get("net"),
-                        "status": l.get("status", {}).get("name"), "pad_name": pad.get("name"),
-                        "lat": float(pad["latitude"]) if pad.get("latitude") else None,
-                        "lon": float(pad["longitude"]) if pad.get("longitude") else None,
-                        "location_name": loc.get("name"),
-                        "provider": l.get("launch_service_provider", {}).get("name"),
-                    })
-                launches.clear()
-                launches.extend([l for l in new_launches if l["lat"] is not None])
-                mark_health("launch_library", True)
-                print(f"Launch Library: {len(launches)} upcoming launches loaded.")
+
+                next_url = LAUNCH_LIBRARY_URL
+
+                for _ in range(5):
+                    if not next_url:
+                        break
+
+                    resp = await client.get(next_url)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    for launch in data.get("results", []):
+                        pad = launch.get("pad") or {}
+                        location = pad.get("location") or {}
+                        provider = (
+                            launch.get("launch_service_provider")
+                            or {}
+                        )
+
+                        lat = None
+                        lon = None
+
+                        try:
+                            if pad.get("latitude") is not None:
+                                lat = float(pad["latitude"])
+
+                            if pad.get("longitude") is not None:
+                                lon = float(pad["longitude"])
+
+                        except (TypeError, ValueError):
+                            lat = None
+                            lon = None
+
+                        new_launches.append({
+                            "id": launch.get("id"),
+                            "name": launch.get("name"),
+                            "net": launch.get("net"),
+                            "status": (
+                                launch.get("status") or {}
+                            ).get("name"),
+                            "pad_name": pad.get("name"),
+                            "lat": lat,
+                            "lon": lon,
+                            "location_name": location.get("name"),
+                            "provider": provider.get("name"),
+                            "flightclub_url": None,
+                        })
+
+                    next_url = data.get("next")
+
+                valid_launches = [
+                    launch
+                    for launch in new_launches
+                    if launch["lat"] is not None
+                    and launch["lon"] is not None
+                ]
+
+                unique_launches = {}
+
+                for launch in valid_launches:
+                    unique_launches[launch["id"]] = launch
+
+                if unique_launches:
+                    launches.clear()
+                    launches.extend(
+                        unique_launches.values()
+                    )
+
+                mark_health(
+                    "launch_library",
+                    True,
+                )
+
+                print(
+                    f"Launch Library: "
+                    f"{len(launches)} global upcoming "
+                    f"launches loaded."
+                )
+
             except Exception as e:
-                mark_health("launch_library", False, str(e))
-                print(f"Launch Library poll failed ({type(e).__name__}: {e}), keeping previous data.")
-            await asyncio.sleep(3600)
+                mark_health(
+                    "launch_library",
+                    False,
+                    str(e),
+                )
+
+                print(
+                    f"Launch Library poll failed "
+                    f"({type(e).__name__}: {e}), "
+                    f"keeping previous data."
+                )
+
+            await asyncio.sleep(300)
 
 
 async def fires_poller():
@@ -1125,11 +1365,15 @@ EVENT_QUERIES = [
 
 from historical_events import HISTORICAL_EVENTS
 
+
 @app.get("/api/historical")
 async def get_historical(up_to_year: int = Query(default=2026)):
-    return {"events": [e for e in HISTORICAL_EVENTS if e["year"] <= up_to_year]}
-
-
+    return {
+        "events": [
+            e for e in HISTORICAL_EVENTS
+            if e["year"] <= up_to_year
+        ]
+    }
 
 
 @app.get("/api/events")
@@ -1213,7 +1457,7 @@ async def get_events(
         # We return the articles as metadata for now.
         # No fake coordinates.
         data = {
-            "type": "FeatureCollection",
+            "type": "FeatureCollecti@app.get(on",
             "features": [],
             "source": "google_news",
             "articles": news_articles,
@@ -1250,6 +1494,12 @@ async def get_events(
     }
 
     return fallback
+
+
+@app.get("/api/solar-system")
+async def solar_system_endpoint():
+    return await get_solar_system()
+
 
 
 @app.get("/api/ships")
@@ -1290,9 +1540,26 @@ async def get_chokepoint_risk():
     for hotspot in ADSB_HOTSPOTS:
         name, lat, lon = hotspot["name"], hotspot["lat"], hotspot["lon"]
         jam_score = jam_by_region.get(name, {}).get("jam_score", 0)
-        ship_count = sum(1 for s in ships.values() if haversine_km(lat, lon, s["lat"], s["lon"]) < 300)
+        ship_count = sum(
+            1
+            for s in ships.values()
+            if s["lat"] is not None
+            and s["lon"] is not None
+            and haversine_km(lat, lon, s["lat"], s["lon"]) < 300
+        )
         shipping_anomaly_score = 100 if ship_count < 5 else max(0, 100 - ship_count * 10)
-        nearby_events = sum(1 for f in event_features if haversine_km(lat, lon, f["geometry"]["coordinates"][1], f["geometry"]["coordinates"][0]) < 500)
+        nearby_events = sum(
+            1
+            for f in event_features
+            if f.get("geometry", {}).get("coordinates")
+            and haversine_km(
+                lat,
+                lon,
+                f["geometry"]["coordinates"][1],
+                f["geometry"]["coordinates"][0],
+            )
+            < 500
+        )
         event_density_score = min(nearby_events * 15, 100)
         composite = round(jam_score * 0.5 + shipping_anomaly_score * 0.2 + event_density_score * 0.3, 1)
         results.append({
@@ -1303,6 +1570,7 @@ async def get_chokepoint_risk():
             },
         })
     return {"chokepoints": results}
+
 
 
 @app.get("/api/gps-integrity")
@@ -1389,8 +1657,231 @@ async def get_satellite_tles():
 
 @app.get("/api/launches")
 async def get_launches():
-    return {"launches": launches, "count": len(launches)}
+    print("API launches count:", len(launches))
+    print("API launches object:", id(launches))
 
+    return {
+        "launches": launches,
+        "count": len(launches),
+    }
+
+@app.get("/api/missions")
+async def get_historical_missions():
+    return {
+        "missions": list(HISTORICAL_MISSIONS.values()),
+        "count": len(HISTORICAL_MISSIONS),
+    }
+
+
+@app.get("/api/missions/{mission_id}")
+async def get_historical_mission(mission_id: str):
+
+    mission = HISTORICAL_MISSIONS.get(mission_id)
+
+    if not mission:
+        return {
+            "error": "Mission not found",
+            "mission_id": mission_id,
+        }
+
+    return mission
+
+
+
+@app.get("/api/missions/{mission_id}/trajectory")
+async def get_mission_trajectory_endpoint(
+    mission_id: str,
+):
+    print(" TRAJECTORY ENDPOINT HIT:", mission_id)
+
+    mission = HISTORICAL_MISSIONS.get(
+        mission_id
+    )
+
+    if not mission:
+        return {
+            "available": False,
+            "mission_id": mission_id,
+            "points": [],
+        }
+
+    try:
+        trajectory = await get_mission_trajectory(
+            mission
+        )
+
+        return {
+            "available": trajectory["available"],
+            "mission_id": mission_id,
+            "name": mission["name"],
+            "source": trajectory["source"],
+            "source_type": trajectory["source_type"],
+            "accuracy": trajectory["accuracy"],
+            "coordinate_system": (
+                "heliocentric ecliptic J2000"
+            ),
+            "units": {
+                "position": "AU"
+            },
+            "points": trajectory["points"],
+        }
+
+    except Exception as e:
+        print(
+            f"Trajectory fetch failed "
+            f"for {mission_id}: {e}"
+        )
+
+        return {
+            "available": False,
+            "mission_id": mission_id,
+            "name": mission["name"],
+            "source": mission.get(
+                "source",
+                "Unknown",
+            ),
+            "source_type": mission.get(
+                "source_type",
+                "unknown",
+            ),
+            "accuracy": mission.get(
+                "trajectory",
+                {}
+            ).get(
+                "accuracy",
+                "unknown",
+            ),
+            "points": [],
+            "error": str(e),
+        }
+
+
+@app.get("/api/missions/{mission_id}/state")
+async def get_historical_mission_state(
+    mission_id: str,
+    time: str,
+):
+    mission = HISTORICAL_MISSIONS.get(
+        mission_id
+    )
+
+    if not mission:
+        return {
+            "error": "Mission not found",
+            "mission_id": mission_id,
+        }
+
+    try:
+        # Get generic mission state
+        state = get_mission_state(
+            mission,
+            time,
+        )
+
+        # Convert mission time to Julian Date
+        timestamp_jd = datetime_to_julian_date(
+            state["time"]
+        )
+
+        spacecraft = None
+
+        # Load trajectory when available
+        try:
+            trajectory = await get_mission_trajectory(
+                mission
+            )
+
+            points = trajectory.get(
+                "points",
+                [],
+            )
+
+            spacecraft_position = (
+                interpolate_trajectory_position(
+                    points,
+                    timestamp_jd,
+                )
+            )
+
+            if spacecraft_position:
+                spacecraft = {
+                    "position": spacecraft_position,
+                    "units": "AU",
+                }
+
+        except Exception as trajectory_error:
+            print(
+                f"Trajectory unavailable "
+                f"for {mission_id}: "
+                f"{trajectory_error}"
+            )
+
+        state["spacecraft"] = spacecraft
+
+        return state
+
+    except Exception as e:
+        return {
+            "error": "Unable to determine mission state",
+            "mission_id": mission_id,
+            "time": time,
+            "details": str(e),
+        }
+
+@app.get("/api/launches/{launch_id}/telemetry")
+async def get_launch_telemetry(launch_id: str):
+    url = (
+        "http://api.launchdashboard.space/v2/launches"
+        f"?launch_library_2_id={launch_id}"
+    )
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=15,
+            headers=BROWSER_HEADERS,
+        ) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+        return {
+            "launch_id": launch_id,
+            "raw": data.get("raw", []),
+            "analysed": data.get("analysed", []),
+            "events": data.get("events", []),
+        }
+
+    except Exception as e:
+        print(f"Launch telemetry fetch failed: {e}")
+
+        return {
+            "launch_id": launch_id,
+            "raw": [],
+            "analysed": [],
+            "events": [],
+        }
+
+
+@app.get("/api/launches/{launch_id}/details")
+async def get_launch_details(launch_id: str):
+    url = f"https://ll.thespacedevs.com/2.2.0/launch/{launch_id}/"
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=15,
+            headers=BROWSER_HEADERS,
+        ) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+
+        return response.json()
+
+    except Exception as e:
+        print(f"Launch details fetch failed: {e}")
+        return {
+            "error": str(e),
+            "launch_id": launch_id,
+        }
 
 @app.get("/api/fires")
 async def get_fires():

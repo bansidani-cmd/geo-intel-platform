@@ -22,8 +22,7 @@ HISTORICAL_EVENTS = [
     {"year": 2022, "lat": 50.4501, "lon": 30.5238, "title": "Russia invades Ukraine", "category": "war"},
     {"year": 2023, "lat": 31.5, "lon": 34.47, "title": "Israel-Hamas war begins", "category": "war"},
 ]
-EOF
-Output
+
 
 HISTORICAL_EVENTS = [
     {"year": 1945, "lat": 35.6762, "lon": 139.6503, "title": "Japan surrenders, WWII ends", "category": "war"},

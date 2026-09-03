@@ -3,9 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <title>Geo-Intel Platform</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -19,18 +22,61 @@
 
     <div id="legend">
       <div class="legend-title">LAYERS</div>
-      <label><input type="checkbox" data-layer="event" checked /><span class="swatch" style="background:#ff2d78"></span>Events</label>
-      <label><input type="checkbox" data-layer="ship" checked /><span class="swatch" style="background:#00e5ff"></span>Ships</label>
-      <label><input type="checkbox" data-layer="flight" checked /><span class="swatch" style="background:#ffd60a"></span>Aircraft</label>
-      <label><input type="checkbox" data-layer="quake" checked /><span class="swatch" style="background:#a855f7"></span>Earthquakes</label>
-      <label><input type="checkbox" data-layer="satellite" checked /><span class="swatch" style="background:#38bdf8"></span>Satellites</label>
-      <label><input type="checkbox" data-layer="launch" checked /><span class="swatch" style="background:#fb923c"></span>Launches</label>
+      <label
+        ><input type="checkbox" data-layer="event" checked /><span
+          class="swatch"
+          style="background: #ff2d78"
+        ></span
+        >Events</label
+      >
+      <label
+        ><input type="checkbox" data-layer="ship" checked /><span
+          class="swatch"
+          style="background: #00e5ff"
+        ></span
+        >Ships</label
+      >
+      <label
+        ><input type="checkbox" data-layer="flight" checked /><span
+          class="swatch"
+          style="background: #ffd60a"
+        ></span
+        >Aircraft</label
+      >
+      <label
+        ><input type="checkbox" data-layer="quake" checked /><span
+          class="swatch"
+          style="background: #a855f7"
+        ></span
+        >Earthquakes</label
+      >
+      <label
+        ><input type="checkbox" data-layer="satellite" checked /><span
+          class="swatch"
+          style="background: #38bdf8"
+        ></span
+        >Satellites</label
+      >
+      <label
+        ><input type="checkbox" data-layer="launch" checked /><span
+          class="swatch"
+          style="background: #fb923c"
+        ></span
+        >Launches</label
+      >
     </div>
 
-<div id="timeSlider">
-  <span id="timeYear">2026</span>
-  <input type="range" id="tlYearRange" min="1945" max="2026" value="2026" step="1" />
-</div>
+    <div id="timeSlider">
+      <span id="timeYear">2026</span>
+      <input
+        type="range"
+        id="tlYearRange"
+        min="1945"
+        max="2026"
+        value="2026"
+        step="1"
+      />
+    </div>
 
     <div id="infoPanel" class="hidden">
       <button id="closePanel">&times;</button>
@@ -38,12 +84,65 @@
     </div>
 
     <button id="trackListToggle">☰ TRACK LIST</button>
+
+    <div id="solarModeToggle">
+      <button id="btnEarthView" class="mode-btn active">EARTH</button>
+      <button id="btnSolarView" class="mode-btn">SOLAR</button>
+    </div>
+
+    <div id="solarControls">
+  <div class="solar-control-title">SOLAR CONTROLS</div>
+
+  <label>
+    SPEED
+    <input
+      id="solarSpeedSlider"
+      type="range"
+      min="0"
+      max="5"
+      step="0.1"
+      value="1"
+    >
+    <span id="solarSpeedValue">1.0×</span>
+  </label>
+
+  <button id="btnToggleOrbits" class="solar-control-btn">
+    ORBITS: ON
+  </button>
+
+  <button id="btnToggleLabels" class="solar-control-btn">
+    LABELS: ON
+  </button>
+
+  <button id="btnToggleStars" class="solar-control-btn">
+    STARS: ON
+  </button>
+
+  <button id="btnResetSolarView" class="solar-control-btn">
+    RESET VIEW
+  </button>
+
+  <div class="solar-data-status">
+  <div>POSITION: AU</div>
+  <div>VELOCITY: AU/DAY</div>
+  <div>FRAME: ICRF</div>
+
+</div>
+</div>
+
+
+
+
     <div id="trackListPanel" class="hidden">
       <div class="tl-header">
         <span>LIVE TRACKS</span>
         <button id="closeTrackList">&times;</button>
       </div>
-      <input id="tlSearch" type="text" placeholder="Search name, MMSI, ICAO24..." />
+      <input
+        id="tlSearch"
+        type="text"
+        placeholder="Search name, MMSI, ICAO24..."
+      />
       <select id="tlFilter">
         <option value="all">All types</option>
         <option value="flight">Aircraft</option>
@@ -57,25 +156,28 @@
       <div id="tlList"></div>
     </div>
 
-<pre id="healthPanel" style="
-    position:absolute;
-    bottom:24px;
-    right:24px;
-    width:300px;
-    height:145px;
-    box-sizing:border-box;
-    margin:0;
-    padding:10px 14px;
-    background:rgba(4,12,14,0.85);
-    border:1px solid rgba(0,255,200,0.3);
-    color:#cdfff2;
-    font-family:'Share Tech Mono',monospace;
-    font-size:0.68rem;
-    line-height:1.25;
-    z-index:15;
-    white-space:pre;
-    overflow:hidden;
-"></pre>
+    <pre
+      id="healthPanel"
+      style="
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        width: 300px;
+        height: 145px;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 10px 14px;
+        background: rgba(4, 12, 14, 0.85);
+        border: 1px solid rgba(0, 255, 200, 0.3);
+        color: #cdfff2;
+        font-family: 'Share Tech Mono', monospace;
+        font-size: 0.68rem;
+        line-height: 1.25;
+        z-index: 15;
+        white-space: pre;
+        overflow: hidden;
+      "
+    ></pre>
 
     <script type="module" src="/src/main.js"></script>
   </body>
