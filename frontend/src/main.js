@@ -3017,7 +3017,7 @@ const journeyState = {
 };
 
 const journeyCamera = {
-    phase: "earth",
+    phase: null,
 
     target: new THREE.Vector3(),
     position: new THREE.Vector3(),
@@ -3049,6 +3049,24 @@ function setJourneyCameraPhase(phase) {
     );
 }
 
+if (phase === JOURNEY_CAMERA_PHASES.EARTH_ORBIT) {
+    const controls = world.controls();
+
+    controls.enabled = true;
+    controls.autoRotate = true;
+
+    console.log("Journey camera: Earth Orbit Raising");
+}
+
+if (phase === JOURNEY_CAMERA_PHASES.TRANS_MARS_INJECTION) {
+    const controls = world.controls();
+
+    controls.enabled = true;
+    controls.autoRotate = false;
+
+    console.log("Journey camera: Trans-Mars Injection");
+}
+
     console.log(
         "Journey camera phase:",
         phase
@@ -3056,10 +3074,11 @@ function setJourneyCameraPhase(phase) {
 }
 
 const JOURNEY_CAMERA_PHASES = {
-    EARTH: "earth",
     LAUNCH: "launch",
-    HELIOCENTRIC: "heliocentric",
-    MARS: "mars",
+    EARTH_ORBIT: "earth-orbit-raising",
+    TRANS_MARS_INJECTION: "trans-mars-injection",
+    HELIOCENTRIC: "heliocentric-transfer",
+    MARS_ORBIT: "mars-orbit-insertion",
 };
 
 window.journeyState = journeyState;
