@@ -58,8 +58,20 @@ const layerVisible = {
 };
 
 let earthLayersVisible = true;
+
 function earthDataShouldRender() {
-  return earthLayersVisible && solarMode !== SOLAR_MODES.SOLAR;
+  if (solarMode === SOLAR_MODES.SOLAR) {
+    return false;
+  }
+
+  if (
+    solarMode === SOLAR_MODES.JOURNEY &&
+    journeyState.coordinateSystem !== "earth-centered"
+  ) {
+    return false;
+  }
+
+  return earthLayersVisible;
 }
 const previousById = new Map();
 
@@ -232,7 +244,25 @@ let solarMode = SOLAR_MODES.EARTH;
 let solarSystemBodies = [];
 
 const solarSystemObjects = new Map();
+window.solarSystemObjects = solarSystemObjects;
 let historicalMissionTrajectory = null;
+
+// UNIFIED WORLD COORDINATE SYSTEM 
+
+const WORLD = {
+  earthRadius: 100,
+
+  // Existing solar visual scale
+  solarDistanceOffset: 130,
+  solarDistanceScale: 55,
+
+  camera: {
+    earthViewDistance: 570,
+    solarViewDistance: 350,
+  },
+};
+
+window.WORLD = WORLD;
 
 /*SOLAR SYSTEM VISUAL SETTINGS
 These are dashboard visual units.
@@ -2824,12 +2854,8 @@ function setEarthGlobeVisible(visible) {
 }
 
 function setEarthDataVisible(visible) {
-  /*
-   * -------------------------------------------------------
-   * PARTICLES
+  /*PARTICLES
    * Aircraft + ships
-   * -------------------------------------------------------
-   *
    * A zeroed point size can still rasterize as a faint
    * 1px dot on some GPUs/drivers (WebGL enforces a minimum
    * point size). Toggle the whole Points object off too,
@@ -2937,9 +2963,7 @@ function showEarthView() {
 
   world.controls().autoRotateSpeed = 0.25;
 
-  /*
-   * Return to normal Earth camera.
-   */
+  /*Return to normal Earth camera.*/
 
   world.pointOfView(
     {
@@ -2992,7 +3016,58 @@ const journeyState = {
     trajectory: null,
 };
 
+const journeyCamera = {
+    phase: "earth",
+
+    target: new THREE.Vector3(),
+    position: new THREE.Vector3(),
+
+    transition: null,
+};
+
+function setJourneyCameraPhase(phase) {
+
+    if (journeyCamera.phase === phase) {
+        return;
+    }
+
+    journeyCamera.phase = phase;
+
+    if (phase === "launch") {
+    const controls = world.controls();
+
+    controls.enabled = true;
+    controls.autoRotate = false;
+
+    world.pointOfView(
+        {
+            lat: 13.72,
+            lng: 80.23,
+            altitude: 1.1
+        },
+        1500
+    );
+}
+
+    console.log(
+        "Journey camera phase:",
+        phase
+    );
+}
+
+const JOURNEY_CAMERA_PHASES = {
+    EARTH: "earth",
+    LAUNCH: "launch",
+    HELIOCENTRIC: "heliocentric",
+    MARS: "mars",
+};
+
 window.journeyState = journeyState;
+window.journeyCamera = journeyCamera;
+window.setJourneyCameraPhase =
+    setJourneyCameraPhase;
+window.JOURNEY_CAMERA_PHASES =
+    JOURNEY_CAMERA_PHASES;
 window.loadMissionDefinition = loadMissionDefinition;
 window.loadMissionState = loadMissionState;
 window.loadMissionTrajectory = loadMissionTrajectory;
@@ -3006,24 +3081,303 @@ function createHistoricalSpacecraftMarker() {
         return historicalSpacecraftMarker;
     }
 
-    const geometry = new THREE.SphereGeometry(0.025, 16, 16);
-    const material = new THREE.MeshBasicMaterial({
-        color: 0xffff00
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+
+    const ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, 128, 128);
+
+    // SPACECRAFT ICON // 
+
+    ctx.save();
+
+    // Draw spacecraft pointing UP.
+    // The trajectory code will rotate the sprite afterward.
+    ctx.translate(64, 64);
+
+    // Exhaust flame
+    ctx.fillStyle = "#ff9d00";
+    ctx.beginPath();
+    ctx.moveTo(-6, 24);
+    ctx.lineTo(0, 38);
+    ctx.lineTo(6, 24);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#fff200";
+    ctx.beginPath();
+    ctx.moveTo(-3, 24);
+    ctx.lineTo(0, 33);
+    ctx.lineTo(3, 24);
+    ctx.closePath();
+    ctx.fill();
+
+    // Left solar panel
+    ctx.fillStyle = "#4aa3df";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.rect(-34, -5, 18, 25);
+    ctx.fill();
+    ctx.stroke();
+
+    // Right solar panel
+    ctx.beginPath();
+    ctx.rect(16, -5, 18, 25);
+    ctx.fill();
+    ctx.stroke();
+
+    // Solar panel lines
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 1;
+
+    for (let y = 1; y < 20; y += 6) {
+        ctx.beginPath();
+        ctx.moveTo(-34, y);
+        ctx.lineTo(-16, y);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(16, y);
+        ctx.lineTo(34, y);
+        ctx.stroke();
+    }
+
+    // Main spacecraft body
+    ctx.fillStyle = "#eeeeee";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.moveTo(0, -32);      // nose
+    ctx.lineTo(12, -10);
+    ctx.lineTo(10, 20);
+    ctx.lineTo(0, 27);
+    ctx.lineTo(-10, 20);
+    ctx.lineTo(-12, -10);
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.stroke();
+
+    // Orange nose/accent
+    ctx.fillStyle = "#ff8c00";
+
+    ctx.beginPath();
+    ctx.moveTo(0, -32);
+    ctx.lineTo(7, -17);
+    ctx.lineTo(-7, -17);
+    ctx.closePath();
+    ctx.fill();
+
+    // Cockpit / sensor
+    ctx.fillStyle = "#19bfff";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.arc(0, -5, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+
+    //THREE.JS SPRITE// 
+
+    const texture = new THREE.CanvasTexture(canvas);
+
+    texture.needsUpdate = true;
+
+    const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
     });
 
-    historicalSpacecraftMarker = new THREE.Mesh(
-        geometry,
-        material
-    );
+    historicalSpacecraftMarker =
+        new THREE.Sprite(material);
 
     historicalSpacecraftMarker.name =
         "Historical Mission Spacecraft";
 
+    historicalSpacecraftMarker.scale.set(
+        12,
+        12,
+        1
+    );
+
     historicalSpacecraftMarker.visible = false;
 
-    trajectoryGroup.add(historicalSpacecraftMarker);
+    solarSystemGroup.add(
+        historicalSpacecraftMarker
+    );
 
     return historicalSpacecraftMarker;
+}
+
+function updateHistoricalSpacecraftMarker(position) {
+    const marker = createHistoricalSpacecraftMarker();
+
+    if (!position) {
+        marker.visible = false;
+        return;
+    }
+
+    const x = Number(position.x);
+    const y = Number(position.y);
+    const z = Number(position.z);
+
+    if (
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        !Number.isFinite(z)
+    ) {
+        marker.visible = false;
+        return;
+    }
+
+    const distance = Math.sqrt(
+        x * x +
+        y * y +
+        z * z
+    );
+
+    if (!Number.isFinite(distance) || distance <= 0) {
+        marker.visible = false;
+        return;
+    }
+
+    const visualDistance =
+        SOLAR_DISTANCE_OFFSET +
+        Math.log10(1 + distance) *
+        SOLAR_DISTANCE_SCALE;
+
+    const nx = x / distance;
+    const ny = y / distance;
+    const nz = z / distance;
+
+    marker.position.set(
+        nx * visualDistance,
+        nz * visualDistance,
+        ny * visualDistance,
+    );
+
+    marker.visible =
+        solarMode === SOLAR_MODES.JOURNEY &&
+        journeyState.coordinateSystem !== "earth-centered";
+
+        if (marker.visible) {
+    updateHistoricalSpacecraftDirection(position);
+}
+
+        console.log("SPACECRAFT MARKER:", {
+    visible: marker.visible,
+    position: marker.position,
+    parent: marker.parent?.name,
+});
+}
+
+function updateHistoricalSpacecraftDirection(position) {
+    if (!historicalSpacecraftMarker || !journeyState.trajectory?.points) {
+        return;
+    }
+
+    const points = journeyState.trajectory.points;
+
+    if (points.length < 2) {
+        return;
+    }
+
+    // Find the trajectory point closest to current spacecraft position
+    let closestIndex = 0;
+    let closestDistance = Infinity;
+
+    for (let i = 0; i < points.length; i++) {
+        const dx = Number(points[i].x) - Number(position.x);
+        const dy = Number(points[i].y) - Number(position.y);
+        const dz = Number(points[i].z) - Number(position.z);
+
+        const distance = dx * dx + dy * dy + dz * dz;
+
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestIndex = i;
+        }
+    }
+
+    // Use the next trajectory point as the direction
+    const nextIndex = Math.min(
+        closestIndex + 1,
+        points.length - 1
+    );
+
+    if (nextIndex === closestIndex) {
+        return;
+    }
+
+    const current = points[closestIndex];
+    const next = points[nextIndex];
+
+    const distanceCurrent = Math.sqrt(
+        current.x ** 2 +
+        current.y ** 2 +
+        current.z ** 2
+    );
+
+    const distanceNext = Math.sqrt(
+        next.x ** 2 +
+        next.y ** 2 +
+        next.z ** 2
+    );
+
+    const currentVisualDistance =
+        SOLAR_DISTANCE_OFFSET +
+        Math.log10(1 + distanceCurrent) *
+        SOLAR_DISTANCE_SCALE;
+
+    const nextVisualDistance =
+        SOLAR_DISTANCE_OFFSET +
+        Math.log10(1 + distanceNext) *
+        SOLAR_DISTANCE_SCALE;
+
+    const currentVisual = new THREE.Vector3(
+        (current.x / distanceCurrent) * currentVisualDistance,
+        (current.z / distanceCurrent) * currentVisualDistance,
+        (current.y / distanceCurrent) * currentVisualDistance
+    );
+
+    const nextVisual = new THREE.Vector3(
+        (next.x / distanceNext) * nextVisualDistance,
+        (next.z / distanceNext) * nextVisualDistance,
+        (next.y / distanceNext) * nextVisualDistance
+    );
+
+    const direction = new THREE.Vector3()
+        .subVectors(nextVisual, currentVisual)
+        .normalize();
+
+    // Project trajectory direction onto the camera plane
+    const camera = world.camera();
+
+    const cameraRight = new THREE.Vector3()
+        .setFromMatrixColumn(camera.matrixWorld, 0)
+        .normalize();
+
+    const cameraUp = new THREE.Vector3()
+        .setFromMatrixColumn(camera.matrixWorld, 1)
+        .normalize();
+
+    const screenX = direction.dot(cameraRight);
+    const screenY = direction.dot(cameraUp);
+
+    const angle = Math.atan2(screenY, screenX);
+
+    historicalSpacecraftMarker.material.rotation =
+    angle + Math.PI;
 }
 
 window.createHistoricalSpacecraftMarker =
@@ -3069,6 +3423,7 @@ async function startHistoricalMissionJourney(missionId) {
         }
 
         // 5. Activate Journey mode
+        journeyState.missionId = missionId;
         journeyState.active = true;
 
         // 6. Switch the visual scene to Journey mode
@@ -3137,6 +3492,9 @@ async function loadMissionState(missionId, time) {
 
     journeyState.currentTime = state.time;
     journeyState.currentPhase = state.phase;
+
+setJourneyCameraPhase(state.phase?.id);
+
     journeyState.coordinateSystem = state.coordinate_system;
     journeyState.spacecraftPosition =
         state.spacecraft?.position || null;
@@ -3178,7 +3536,12 @@ window.updateHistoricalMissionState =
 // 
 
 async function updateHistoricalMissionView(time) {
-    const state = await updateHistoricalMissionState(time);
+
+    const previousCoordinateSystem =
+        journeyState.coordinateSystem;
+
+    const state =
+        await updateHistoricalMissionState(time);
 
     if (!state) {
         return null;
@@ -3188,11 +3551,26 @@ async function updateHistoricalMissionView(time) {
         journeyState.coordinateSystem;
 
     console.log(
-        "Updating Journey view:",
+        "Updating Journey:",
         coordinateSystem
     );
 
-    showJourneyView();
+    // Camera/scene transitions are handled
+    // separately by the Journey Camera Controller.
+
+    if (
+        previousCoordinateSystem === "earth-centered" &&
+        coordinateSystem !== "earth-centered"
+    ) {
+        console.log(
+            "Journey: Earth → Solar transition"
+        );
+
+        // TEMPORARY:
+        // Leave this empty.
+        // We will replace transitionJourneyToSolar()
+        // with the real continuous camera controller.
+    }
 
     return state;
 }
@@ -3200,6 +3578,100 @@ async function updateHistoricalMissionView(time) {
 window.updateHistoricalMissionView =
     updateHistoricalMissionView;
 
+let historicalJourneyAnimation = null;
+
+function startHistoricalJourneyPlayback() {
+    if (!journeyState.trajectory?.points?.length) {
+        console.warn("No historical trajectory loaded.");
+        return;
+    }
+
+    const points = journeyState.trajectory.points;
+
+    let index = 0;
+    let lastTimestamp = null;
+    let lastStateUpdate = 0;
+
+    const pointsPerSecond = 5;
+
+    function animate(timestamp) {
+        if (!journeyState.active) {
+            historicalJourneyAnimation = null;
+            return;
+        }
+
+        if (lastTimestamp === null) {
+            lastTimestamp = timestamp;
+        }
+
+        const delta = timestamp - lastTimestamp;
+        lastTimestamp = timestamp;
+
+        // Smooth continuous movement
+        index += (delta / 1000) * pointsPerSecond;
+
+        if (index >= points.length - 1) {
+            index = points.length - 1;
+        }
+
+        const i = Math.floor(index);
+        const t = index - i;
+
+        const current = points[i];
+        const next = points[Math.min(i + 1, points.length - 1)];
+
+        const position = {
+            x: Number(current.x) +
+                (Number(next.x) - Number(current.x)) * t,
+
+            y: Number(current.y) +
+                (Number(next.y) - Number(current.y)) * t,
+
+            z: Number(current.z) +
+                (Number(next.z) - Number(current.z)) * t,
+        };
+
+        // Update spacecraft every frame
+        journeyState.spacecraftPosition = position;
+
+        updateHistoricalSpacecraftMarker(position);
+
+        // Backend/state update only ~4 times per second
+        if (timestamp - lastStateUpdate > 250) {
+            lastStateUpdate = timestamp;
+
+            const unixMilliseconds =
+                (Number(current.jd) - 2440587.5) * 86400000;
+
+            const currentTime =
+                new Date(unixMilliseconds);
+
+            // DO NOT await this
+            updateHistoricalMissionView(
+                currentTime.toISOString()
+            );
+        }
+
+        if (index < points.length - 1) {
+            historicalJourneyAnimation =
+                requestAnimationFrame(animate);
+        } else {
+            historicalJourneyAnimation = null;
+
+            console.log(
+                "Historical Journey playback complete."
+            );
+        }
+    }
+
+    historicalJourneyAnimation =
+        requestAnimationFrame(animate);
+}
+
+window.startHistoricalJourneyPlayback =
+    startHistoricalJourneyPlayback;
+
+    
 async function loadMissionTrajectory(missionId) {
     const trajectory = await fetchJSON(
         `http://localhost:8001/api/missions/${missionId}/trajectory`,
@@ -3227,20 +3699,51 @@ async function loadMissionTrajectory(missionId) {
 }
 
 
+/* JOURNEY VIEW */
+
 function showJourneyView(options = {}) {
+
     solarMode = SOLAR_MODES.JOURNEY;
 
-    setEarthGlobeVisible(true);
-    setEarthDataVisible(true);
+    const coordinateSystem = journeyState.coordinateSystem;
 
-    if (journeyState.coordinateSystem === "earth-centered") {
-        showEarthView();
+    if (coordinateSystem === "earth-centered") {
+
+        // Journey Earth scene
+        setEarthGlobeVisible(true);
+        setEarthDataVisible(true);
         solarSystemGroup.visible = false;
-    } else {
-        solarSystemGroup.visible = true;
+
+        world.controls().enabled = true;
+        world.controls().autoRotate =
+        journeyCamera.phase !== "launch"; 
+        // Only position camera when entering Earth scene
+        if (options.resetCamera !== false) {
+    if (journeyCamera.phase !== "launch") {
+        world.pointOfView(
+            { lat: 20, lng: 30, altitude: 2.5 },
+            1000
+        );
+    }
+}
     }
 
-    world.controls().autoRotate = false;
+    else {
+
+        // Journey heliocentric / planetary scene
+        setEarthGlobeVisible(false);
+        setEarthDataVisible(false);
+        solarSystemGroup.visible = true;
+
+        world.controls().enabled = true;
+world.controls().autoRotate =
+    journeyCamera.phase !== "launch";
+
+        // Only focus camera when entering Solar scene
+        if (options.resetCamera !== false) {
+    focusSolarSystem();
+}
+    }
 
     if (typeof options.onStart === 'function') {
         options.onStart();
@@ -3248,101 +3751,264 @@ function showJourneyView(options = {}) {
 
     console.log(
         'Solar Mode: JOURNEY',
-        journeyState.coordinateSystem
+        coordinateSystem
     );
 }
 
-/*PUBLIC MODE CONTROLLER */
+
+/* JOURNEY SOLAR CAMERA */
+
+function focusJourneySolarSystem() {
+
+    const camera = world.camera();
+    const controls = world.controls();
+    const spacecraft = historicalSpacecraftMarker;
+
+    // If spacecraft marker does not exist yet,
+    // fall back to normal Solar System camera
+    if (!spacecraft || !spacecraft.visible) {
+
+        focusSolarSystem();
+
+        return;
+    }
+
+    // Focus around the actual spacecraft position
+    const target = spacecraft.position.clone();
+
+    const offset = new THREE.Vector3(
+        180,
+        120,
+        180
+    );
+
+    camera.position.copy(
+        target.clone().add(offset)
+    );
+
+    camera.lookAt(target);
+
+    controls.target.copy(target);
+
+    console.log(
+        "Journey solar camera focused on spacecraft:",
+        target
+    );
+}
+
+
+/* PUBLIC MODE CONTROLLER */
 
 function setSolarMode(mode, options = {}) {
-  const status = document.getElementById('status');
 
-  if (status) {
-    if (mode === SOLAR_MODES.SOLAR) {
-      status.textContent = 'MODE: SOLAR';
-    } else if (mode === SOLAR_MODES.EARTH) {
-      status.textContent = 'MODE: EARTH';
+    const status = document.getElementById('status');
+
+    if (status) {
+
+        if (mode === SOLAR_MODES.SOLAR) {
+
+            status.textContent = 'MODE: SOLAR';
+
+        } else if (mode === SOLAR_MODES.EARTH) {
+
+            status.textContent = 'MODE: EARTH';
+        }
     }
-  }
 
-  if (!Object.values(SOLAR_MODES).includes(mode)) {
-    console.warn(
-      'Unknown Solar System mode:',
-      mode,
-    );
-    return;
-  }
+    if (!Object.values(SOLAR_MODES).includes(mode)) {
 
-  if (mode === SOLAR_MODES.EARTH) {
-    showEarthView();
-    return;
-  }
+        console.warn(
+            'Unknown Solar System mode:',
+            mode
+        );
 
-  if (mode === SOLAR_MODES.SOLAR) {
-    console.log(
-      'SOLAR MODE: starting historical trajectory load',
-    );
+        return;
+    }
 
-    showSolarView();
+    if (mode === SOLAR_MODES.EARTH) {
 
-    loadHistoricalMissionTrajectory(
-      'india-mangalyaan',
-    );
+        showEarthView();
 
-    return;
-  }
+        return;
+    }
 
-  if (mode === SOLAR_MODES.JOURNEY) {
-    showJourneyView(options);
-    return;
-  }
+    if (mode === SOLAR_MODES.SOLAR) {
+
+        console.log(
+            'SOLAR MODE: starting historical trajectory load'
+        );
+
+        showSolarView();
+
+        loadHistoricalMissionTrajectory(
+            'india-mangalyaan'
+        );
+
+        return;
+    }
+
+    if (mode === SOLAR_MODES.JOURNEY) {
+
+        showJourneyView(options);
+
+        return;
+    }
 }
 
 
-
-/*SOLAR SYSTEM CAMERA */
+/* SOLAR SYSTEM CAMERA */
 
 function focusSolarSystem() {
-  console.trace('focusSolarSystem() CALLED');
 
-  if (solarSystemObjects.size === 0) {
-    console.warn('Solar System: no objects to focus.');
-    return;
-  }
+    console.trace('focusSolarSystem() CALLED');
 
-  /*Find outermost object*/
+    if (solarSystemObjects.size === 0) {
 
-  let maxDistance = 0;
+        console.warn(
+            'Solar System: no objects to focus.'
+        );
 
-  for (const object of solarSystemObjects.values()) {
-    const distance = object.position.length();
-
-    if (Number.isFinite(distance)) {
-      maxDistance = Math.max(maxDistance, distance);
+        return;
     }
-  }
 
-  /*Camera must comfortably contain
-   * Neptune and the other outer bodies.*/
+    /* Find outermost object */
 
-const cameraDistance = Math.max(400, maxDistance * 1.35);
+    let maxDistance = 0;
 
-  const camera = world.camera();
+    for (const object of solarSystemObjects.values()) {
 
-  /*Slightly elevated heliocentric view. */
+        const distance = object.position.length();
 
-  camera.position.set(
-    cameraDistance * 0.72,
-    cameraDistance * 0.6,
-    cameraDistance * 0.72,
-  );
+        if (Number.isFinite(distance)) {
 
-  camera.lookAt(0, 0, 0);
+            maxDistance =
+                Math.max(
+                    maxDistance,
+                    distance
+                );
+        }
+    }
 
-  world.controls().target.set(0, 0, 0);
+    /*
+     * Camera must comfortably contain
+     * Neptune and the other outer bodies.
+     */
 
-  console.log('Solar System camera focused:', camera.position);
+    const cameraDistance =
+        Math.max(
+            400,
+            maxDistance * 1.35
+        );
+
+    const camera = world.camera();
+
+    /*
+     * Slightly elevated heliocentric view.
+     */
+
+    camera.position.set(
+        cameraDistance * 0.72,
+        cameraDistance * 0.6,
+        cameraDistance * 0.72
+    );
+
+    camera.lookAt(0, 0, 0);
+
+    world.controls().target.set(
+        0,
+        0,
+        0
+    );
+
+    console.log(
+        'Solar System camera focused:',
+        camera.position
+    );
 }
+
+function transitionJourneyToSolar() {
+
+    const camera = world.camera();
+    const controls = world.controls();
+
+    const startPosition = camera.position.clone();
+    const startTarget = controls.target.clone();
+
+    // Final Solar System camera position
+    let maxDistance = 0;
+
+    for (const object of solarSystemObjects.values()) {
+        const distance = object.position.length();
+
+        if (Number.isFinite(distance)) {
+            maxDistance = Math.max(maxDistance, distance);
+        }
+    }
+
+    const cameraDistance = Math.max(400, maxDistance * 1.35);
+
+    const endPosition = new THREE.Vector3(
+        cameraDistance * 0.72,
+        cameraDistance * 0.6,
+        cameraDistance * 0.72
+    );
+
+    const endTarget = new THREE.Vector3(0, 0, 0);
+
+    const duration = 3500;
+    const startTime = performance.now();
+
+    controls.enabled = false;
+
+    function easeInOutCubic(t) {
+        return t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function animateCamera(now) {
+
+        const elapsed = now - startTime;
+
+        let progress = elapsed / duration;
+
+        if (progress > 1) {
+            progress = 1;
+        }
+
+        const eased = easeInOutCubic(progress);
+
+        camera.position.lerpVectors(
+            startPosition,
+            endPosition,
+            eased
+        );
+
+        controls.target.lerpVectors(
+            startTarget,
+            endTarget,
+            eased
+        );
+
+        camera.lookAt(controls.target);
+
+        if (progress < 1) {
+
+            requestAnimationFrame(animateCamera);
+
+        } else {
+
+            controls.enabled = true;
+
+            console.log(
+                "Journey: Solar camera transition complete."
+            );
+        }
+    }
+
+    requestAnimationFrame(animateCamera);
+}
+
 
 /*RETURN TO EARTH */
 
@@ -3547,9 +4213,7 @@ window.returnToEarthView = returnToEarthView;
 
 window.focusSolarSystem = focusSolarSystem;
 
-/* =========================================================
-   SOLAR SYSTEM DEBUG
-========================================================= */
+/*SOLAR SYSTEM DEBUG*/
 
 window.solarSystemDebug = function () {
   console.log('================================');
@@ -3583,15 +4247,11 @@ window.solarSystemDebug = function () {
   console.log('================================');
 };
 
-/* =========================================================
-   INITIALISE
-========================================================= */
+/* INITIALISE */
 
 loadSolarSystem();
 
-/* =========================================================
-   STARFIELD
-========================================================= */
+/* STARFIELD*/ 
 
 function addStarfield() {
   const starCount = 3000;
@@ -3629,10 +4289,8 @@ function addStarfield() {
 
 addStarfield();
 
-/* =========================================================
-   PARTICLE SYSTEM
-   AIRCRAFT + SHIPS
-========================================================= */
+/*PARTICLE SYSTEM
+AIRCRAFT + SHIPS */
 
 const particlePositions = new Float32Array(MAX_PARTICLES * 3);
 
@@ -3735,9 +4393,7 @@ const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
 
 world.scene().add(particleSystem);
 
-/* =========================================================
-   LAYER VISIBILITY
-========================================================= */
+/* LAYER VISIBILITY */
 
 function applyVisibility() {
   for (let i = 0; i < particleCount; i += 1) {
@@ -3847,9 +4503,7 @@ async function refreshData() {
     })
     .filter(Boolean);
 
-  /* -------------------------------------------------------
-     EARTHQUAKES
-  ------------------------------------------------------- */
+  /*  EARTHQUAKES */
 
   const quakes = (quakesData.earthquakes || [])
     .map((quake, index) => ({
@@ -3863,9 +4517,7 @@ async function refreshData() {
     }))
     .filter((quake) => quake.lat !== null && quake.lng !== null);
 
-  /* -------------------------------------------------------
-     SHIPS
-  ------------------------------------------------------- */
+  /* SHIPS */
 
   const ships = (shipsData.ships || [])
     .map((ship) => ({
@@ -3897,9 +4549,7 @@ async function refreshData() {
     }))
     .filter((ship) => ship.lat !== null && ship.lng !== null);
 
-  /* -------------------------------------------------------
-     FLIGHTS
-  ------------------------------------------------------- */
+  /*  FLIGHTS */
 
   const flights = (flightsData.flights || [])
     .map((flight) => ({
@@ -4065,9 +4715,7 @@ function updateParticles(records) {
   animStart = now;
 }
 
-/* =========================================================
-   PARTICLE HIGHLIGHT
-========================================================= */
+/*  PARTICLE HIGHLIGHT */
 
 function reapplyParticleHighlight() {
   for (let i = 0; i < particleCount; i += 1) {
@@ -4101,9 +4749,7 @@ function reapplyParticleHighlight() {
   particleGeometry.attributes.size.needsUpdate = true;
 }
 
-/* =========================================================
-   PARTICLE ANIMATION
-========================================================= */
+/* PARTICLE ANIMATION */
 
 function animateParticles() {
   requestAnimationFrame(animateParticles);
@@ -4135,10 +4781,8 @@ function animateParticles() {
 
 animateParticles();
 
-/* =========================================================
-   LOW-VOLUME OBJECTS
-   EVENTS + EARTHQUAKES + LAUNCHES + DISASTERS
-========================================================= */
+/* LOW-VOLUME OBJECTS
+   EVENTS + EARTHQUAKES + LAUNCHES + DISASTERS */
 
 function renderLowVolumeLayer() {
   if (!earthDataShouldRender()) {
@@ -4370,9 +5014,8 @@ function renderCustomLayer() {
     .customLayerData(combined)
 
     .customThreeObject((data) => {
-      /* -------------------------------------------------
-           SATELLITE
-        ------------------------------------------------- */
+
+      /*  SATELLITE */
 
       if (data.type === 'satellite') {
   const isSelected = data.id === selectedId;
@@ -4486,9 +5129,7 @@ function renderCustomLayer() {
         return;
       }
 
-      /* -----------------------------------------------
-           JAM ZONE POSITION
-        ----------------------------------------------- */
+      /* JAM ZONE POSITION */
 
       Object.assign(object.position, world.getCoords(data.lat, data.lon, 0.03));
     })
@@ -5411,9 +6052,7 @@ function showPanel(data) {
     ]);
   }
 
-  /* -------------------------------------------------------
-     SHIP
-  ------------------------------------------------------- */
+  /* SHIP */
   else if (data.type === 'ship') {
     typeLabel = 'VESSEL (AIS)';
 
@@ -5454,9 +6093,7 @@ function showPanel(data) {
     ]);
   }
 
-  /* -------------------------------------------------------
-     FLIGHT
-  ------------------------------------------------------- */
+  /*FLIGHT */
   else if (data.type === 'flight') {
     typeLabel = 'AIRCRAFT (ADS-B)';
 
@@ -5474,9 +6111,7 @@ function showPanel(data) {
     rows.push(['Longitude', safeNumber(data.lng)?.toFixed(4) ?? 'Unknown']);
   }
 
-  /* -------------------------------------------------------
-     EARTHQUAKE
-  ------------------------------------------------------- */
+  /* EARTHQUAKE */
   else if (data.type === 'quake') {
     typeLabel = 'EARTHQUAKE (USGS)';
 
@@ -5664,9 +6299,7 @@ if (closePanel) {
   });
 }
 
-/* =========================================================
-   MOUSE / PARTICLE CLICK DETECTION
-========================================================= */
+/* MOUSE / PARTICLE CLICK DETECTION */
 
 const raycaster = new THREE.Raycaster();
 
@@ -5760,9 +6393,7 @@ if (trackListToggle && trackListPanel) {
   });
 }
 
-/* =========================================================
-   TRACK DATA
-========================================================= */
+/* TRACK DATA */
 
 function updateAllTracks() {
   allTracks = [
@@ -6201,24 +6832,26 @@ function formatAISeta(eta) {
 window.refreshData = refreshData;
 
 window.__debug = {
-  get solarMode() {
-    return solarMode;
-  },
-  get earthLayersVisible() {
-    return earthLayersVisible;
-  },
-  earthDataShouldRender,
+
+    get solarMode() {
+        return solarMode;
+    },
+
+    get earthLayersVisible() {
+        return earthLayersVisible;
+    },
+
+    earthDataShouldRender,
+
+    get spacecraft() {
+        return historicalSpacecraftMarker;
+    },
+
+    get solarObjects() {
+        return solarSystemObjects;
+    },
+
+    get trajectory() {
+        return journeyState.trajectory;
+    },
 };
-
-const solarCanvas =
-  world.renderer().domElement;
-
-solarCanvas.addEventListener(
-  'pointermove',
-  handleSolarPointerMove,
-);
-
-solarCanvas.addEventListener(
-  'click',
-  handleSolarPointerClick,
-);
