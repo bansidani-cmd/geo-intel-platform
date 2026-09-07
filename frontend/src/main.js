@@ -66,21 +66,19 @@ const layerVisible = {
   disaster: true,
 };
 
-let earthLayersVisible = true;
-
 function earthDataShouldRender() {
-  if (solarMode === SOLAR_MODES.SOLAR) {
+  if (appState.mode === SOLAR_MODES.SOLAR) {
     return false;
   }
 
   if (
-    solarMode === SOLAR_MODES.JOURNEY &&
+    appState.mode === SOLAR_MODES.JOURNEY &&
     journeyState.coordinateSystem !== "earth-centered"
   ) {
     return false;
   }
 
-  return earthLayersVisible;
+  return appState.earth.layersVisible;
 }
 const previousById = new Map();
 
@@ -248,7 +246,6 @@ const SOLAR_MODES = {
     JOURNEY: 'journey',
 };
 
-let solarMode = appState.mode;
 
 let solarSystemBodies = [];
 
@@ -2416,15 +2413,15 @@ label.visible = solarLabelsVisible;
 
 function handleSolarPointerMove(event) {
   if (
-    solarMode !== SOLAR_MODES.SOLAR &&
-    solarMode !== SOLAR_MODES.JOURNEY
+    appState.mode !== SOLAR_MODES.SOLAR &&
+    appState.mode !== SOLAR_MODES.JOURNEY
   ) {
     return;
-  }
+  } 
 
   const rect =
     world.renderer().domElement.getBoundingClientRect();
-
+    
   solarMouse.x =
     ((event.clientX - rect.left) / rect.width) * 2 - 1;
 
@@ -2506,8 +2503,8 @@ function handleSolarPointerMove(event) {
 
 function handleSolarPointerClick(event) {
   if (
-    solarMode !== SOLAR_MODES.SOLAR &&
-    solarMode !== SOLAR_MODES.JOURNEY
+    appState.mode !== SOLAR_MODES.SOLAR &&
+    appState.mode !== SOLAR_MODES.JOURNEY
   ) {
     return;
   }
@@ -2947,9 +2944,10 @@ function setEarthDataVisible(visible) {
 }
 
 /*EARTH VIEW */
-
 function showEarthView() {
-  solarMode = SOLAR_MODES.EARTH;
+    setState((state) => {
+        state.mode = SOLAR_MODES.EARTH;
+    });
   document.body.classList.remove('solar-mode');
 
   /*Solar System OFF*/
@@ -2989,7 +2987,9 @@ function showEarthView() {
 /*SOLAR VIEW */
 
 function showSolarView() {
-  solarMode = SOLAR_MODES.SOLAR;
+    setState((state) => {
+        state.mode = SOLAR_MODES.SOLAR;
+    });
   document.body.classList.add('solar-mode');
 
   selectedSolarBody = null;
@@ -3284,8 +3284,8 @@ function updateHistoricalSpacecraftMarker(position) {
     );
 
     marker.visible =
-        solarMode === SOLAR_MODES.JOURNEY &&
-        journeyState.coordinateSystem !== "earth-centered";
+    appState.mode === SOLAR_MODES.JOURNEY &&
+    journeyState.coordinateSystem !== "earth-centered";
 
         if (marker.visible) {
     updateHistoricalSpacecraftDirection(position);
@@ -3719,8 +3719,9 @@ async function loadMissionTrajectory(missionId) {
 /* JOURNEY VIEW */
 
 function showJourneyView(options = {}) {
-
-    solarMode = SOLAR_MODES.JOURNEY;
+    setState((state) => {
+        state.mode = SOLAR_MODES.JOURNEY;
+    });
 
     const coordinateSystem = journeyState.coordinateSystem;
 
@@ -4215,7 +4216,7 @@ async function loadSolarSystem() {
     /*If Solar View was selected before the API
      * finished loading, focus the system now.*/
 if (
-  solarMode === SOLAR_MODES.SOLAR &&
+  appState.mode === SOLAR_MODES.SOLAR &&
   !selectedSolarBody
 ) {
   solarSystemGroup.visible = true;
@@ -4241,7 +4242,7 @@ window.solarSystemDebug = function () {
 
   console.log('SOLAR SYSTEM DEBUG');
 
-  console.log('Mode:', solarMode);
+  console.log('Mode:', appState.mode);
 
   console.log('Bodies:', solarSystemBodies.length);
 
@@ -6855,11 +6856,12 @@ window.refreshData = refreshData;
 window.__debug = {
 
     get solarMode() {
-        return solarMode;
+        return appState.mode;
     },
 
     get earthLayersVisible() {
-        return earthLayersVisible;
+        return appState.earth.layersVisible;
+
     },
 
     earthDataShouldRender,
