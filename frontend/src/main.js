@@ -2,6 +2,15 @@ import Globe from 'globe.gl';
 import * as THREE from 'three';
 import * as satellite from 'satellite.js';
 
+import {
+    appState,
+    getState,
+    subscribe,
+    setState,
+} from "./core/state.js";
+
+console.log("STATE TEST:", appState);
+
 const statusEl = document.getElementById('status');
 const panelEl = document.getElementById('infoPanel');
 const panelContentEl = document.getElementById('infoPanelContent');
@@ -3003,18 +3012,9 @@ function showSolarView() {
 
 
 
-// HISTORICAL MISSION JOURNEY ENGINE // 
-
-const journeyState = {
-    active: false,
-    missionId: null,
-    mission: null,
-    currentTime: null,
-    currentPhase: null,
-    coordinateSystem: null,
-    spacecraftPosition: null,
-    trajectory: null,
-};
+// CENTRALIZED JOURNEY STATE
+// Source of truth lives in core/state.js.
+const journeyState = appState.journey;
 
 const journeyCamera = {
     phase: null,
