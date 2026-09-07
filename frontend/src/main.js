@@ -243,12 +243,12 @@ world.scene().background = new THREE.Color(0x000000);
 const SOLAR_SYSTEM_API = 'http://localhost:8001/api/solar-system';
 
 const SOLAR_MODES = {
-  EARTH: 'earth',
-  SOLAR: 'solar',
-  JOURNEY: 'journey',
+    EARTH: 'earth',
+    SOLAR: 'solar',
+    JOURNEY: 'journey',
 };
 
-let solarMode = SOLAR_MODES.EARTH;
+let solarMode = appState.mode;
 
 let solarSystemBodies = [];
 
@@ -3010,8 +3010,6 @@ function showSolarView() {
 }
 
 
-
-
 // CENTRALIZED JOURNEY STATE
 // Source of truth lives in core/state.js.
 const journeyState = appState.journey;
@@ -3820,6 +3818,20 @@ function focusJourneySolarSystem() {
 
 function setSolarMode(mode, options = {}) {
 
+    if (!Object.values(SOLAR_MODES).includes(mode)) {
+
+        console.warn(
+            'Unknown Solar System mode:',
+            mode
+        );
+
+        return;
+    }
+
+    setState((state) => {
+        state.mode = mode;
+    });
+
     const status = document.getElementById('status');
 
     if (status) {
@@ -3832,16 +3844,6 @@ function setSolarMode(mode, options = {}) {
 
             status.textContent = 'MODE: EARTH';
         }
-    }
-
-    if (!Object.values(SOLAR_MODES).includes(mode)) {
-
-        console.warn(
-            'Unknown Solar System mode:',
-            mode
-        );
-
-        return;
     }
 
     if (mode === SOLAR_MODES.EARTH) {
