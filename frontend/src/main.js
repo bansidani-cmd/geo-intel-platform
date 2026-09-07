@@ -56,15 +56,6 @@ let lastChokepointRisk = {};
 let selectedId = null;
 let allTracks = [];
 
-const layerVisible = {
-  event: true,
-  ship: true,
-  flight: true,
-  quake: true,
-  satellite: true,
-  launch: true,
-  disaster: true,
-};
 
 function earthDataShouldRender() {
   if (appState.mode === SOLAR_MODES.SOLAR) {
@@ -2898,7 +2889,7 @@ function setEarthDataVisible(visible) {
       }
 
       particleSizes[i] =
-        layerVisible[record.type] !== false
+        appState.earth.layers[record.type] !== false
           ? record.baseSize * (record.id === selectedId ? 1.8 : 1)
           : 0;
     }
@@ -4427,7 +4418,7 @@ function applyVisibility() {
     }
 
     const visible =
-      earthDataShouldRender() && layerVisible[record.type] !== false;
+      earthDataShouldRender() && appState.earth.layers[record.type] !== false;
 
     particleSizes[i] = visible
       ? record.baseSize * (record.id === selectedId ? 1.8 : 1)
@@ -4445,9 +4436,14 @@ legendInputs.forEach((element) => {
   element.addEventListener('change', () => {
     const layer = element.dataset.layer;
 
-    if (layer && Object.prototype.hasOwnProperty.call(layerVisible, layer)) {
-      layerVisible[layer] = element.checked;
-    }
+    if (
+    layer &&
+    Object.prototype.hasOwnProperty.call(appState.earth.layers, layer)
+) {
+    setState((state) => {
+        state.earth.layers[layer] = element.checked;
+    });
+}
 
     applyVisibility();
 
@@ -4713,7 +4709,7 @@ function updateParticles(records) {
     particleColors[i * 3 + 2] = blue;
 
     particleSizes[i] =
-      earthDataShouldRender() && layerVisible[record.type] !== false
+      earthDataShouldRender() && appState.earth.layers[record.type] !== false
         ? baseSize * (record.id === selectedId ? 1.8 : 1)
         : 0;
   }
@@ -4761,7 +4757,7 @@ function reapplyParticleHighlight() {
     particleColors[i * 3 + 2] = blue;
 
     particleSizes[i] =
-      earthDataShouldRender() && layerVisible[record.type] !== false
+      earthDataShouldRender() && appState.earth.layers[record.type] !== false
         ? record.baseSize * (record.id === selectedId ? 1.8 : 1)
         : 0;
   }
@@ -4813,14 +4809,11 @@ function renderLowVolumeLayer() {
   }
 
   const combined = [
-    ...(layerVisible.event ? lowVolumeData.events : []),
-
-    ...(layerVisible.quake ? lowVolumeData.quakes : []),
-
-    ...(layerVisible.launch ? lowVolumeData.launches : []),
-
-    ...(layerVisible.disaster ? lowVolumeData.disasters : []),
-  ];
+    ...(appState.earth.layers.event ? lowVolumeData.events : []),
+    ...(appState.earth.layers.quake ? lowVolumeData.quakes : []),
+    ...(appState.earth.layers.launch ? lowVolumeData.launches : []),
+    ...(appState.earth.layers.disaster ? lowVolumeData.disasters : []),
+];
 
   world
     .objectsData(combined)
@@ -5020,9 +5013,11 @@ function renderCustomLayer() {
     return;
   }
 
-  const satelliteData = layerVisible.satellite ? satPositions : [];
+ const satelliteData = appState.earth.layers.satellite
+    ? satPositions
+    : [];
 
-  const jamData = layerVisible.satellite
+  const jamData = appState.earth.layers.satellite
     ? lastJamRegions.map((region) => ({
         ...region,
         id: `jam-${region.region}`,
