@@ -2,7 +2,6 @@ import Globe from 'globe.gl';
 import * as THREE from 'three';
 import * as satellite from 'satellite.js';
 import { CameraController } from "./core/camera.js";
-import { SolarSystem } from "./world/SolarSystem.js";
 
 import {
     appState,
@@ -208,14 +207,6 @@ const world = Globe()(globeContainer)
 () => world.controls()
 );
 
-const solarSystemWorld = new SolarSystem();
-
-solarSystemWorld.initialize(
-    world.scene()
-);
-
-window.solarSystemWorld = solarSystemWorld;
-
 
 window.world = world;
 
@@ -253,6 +244,9 @@ const SOLAR_MODES = {
 
 
 let solarSystemBodies = [];
+
+const solarSystemObjects = new Map();
+window.solarSystemObjects = solarSystemObjects;
 let historicalMissionTrajectory = null;
 
 // UNIFIED WORLD COORDINATE SYSTEM 
@@ -271,12 +265,45 @@ const WORLD = {
 };
 
 window.WORLD = WORLD;
+// Unified world anchor for the detailed Earth.
+// The solar-system Earth already exists at this position.
+function getEarthWorldPosition() {
+    const earth = window.solarSystemObjects?.get("earth");
+
+    if (!earth) {
+        return new THREE.Vector3(0, 0, 0);
+    }
+
+    return earth.position.clone();
+}
 
 function getEarthCameraTarget() {
-    return solarSystemWorld.getEarthPosition();
+    return getEarthWorldPosition();
 }
 
 window.getEarthCameraTarget = getEarthCameraTarget;
+
+window.getEarthWorldPosition = getEarthWorldPosition;
+
+function positionGlobeAtSolarEarth() {
+    const globe = world.scene().children[0];
+
+    if (!globe || !globe.isMesh) {
+        console.warn("Unified World: Globe mesh not found.");
+        return;
+    }
+
+    const earthPosition = getEarthWorldPosition();
+
+    globe.position.copy(earthPosition);
+
+    console.log(
+        "Unified World: Globe positioned at solar Earth:",
+        globe.position.toArray()
+    );
+}
+
+window.positionGlobeAtSolarEarth = positionGlobeAtSolarEarth;
 
 
 /*SOLAR SYSTEM VISUAL SETTINGS
@@ -465,6 +492,9 @@ const solarMouse = new THREE.Vector2();
  * It has nothing to do with the Earth globe.
  */
 
+const solarSystemGroup = new THREE.Group();
+const solarLabels = new Map();
+
 let selectedSolarBody = null;
 let hoveredSolarBody = null;
 
@@ -472,26 +502,141 @@ let solarOrbitsVisible = true;
 let solarLabelsVisible = true;
 let solarStarsVisible = true;
 
+solarSystemGroup.visible = false;
+
+
 function setSolarOrbitsVisible(visible) {
   solarOrbitsVisible = visible;
-  solarSystemWorld.setOrbitsVisible(visible);
+  solarOrbitGroup.visible = visible;
 }
 
 function setSolarLabelsVisible(visible) {
   solarLabelsVisible = visible;
-  solarSystemWorld.setLabelsVisible(visible);
+
+  for (const label of solarLabels.values()) {
+    label.visible = visible;
+  }
 }
+
+/* SOLAR SYSTEM LIGHTING */
+const solarAmbientLight = new THREE.AmbientLight(
+  0xffffff,
+  0.12,
+);
+
+const solarSunLight = new THREE.PointLight(
+  0xffffff,
+  2.5,
+  0,
+  1.5,
+);
+
+solarSunLight.position.set(0, 0, 0);
+
+solarSystemGroup.add(solarAmbientLight);
+solarSystemGroup.add(solarSunLight);
+
+solarSystemGroup.visible = false;
+
+world.scene().add(solarSystemGroup);
+
+/*SOLAR SYSTEM STARFIELD*/
+
+const solarStarfieldGroup = new THREE.Group();
+
+solarStarfieldGroup.visible = solarStarsVisible;
+
+solarSystemGroup.add(solarStarfieldGroup);
+
+function createSolarStarfield() {
+  const starCount = 1800;
+
+  const positions = new Float32Array(
+    starCount * 3
+  );
+
+  for (let i = 0; i < starCount; i++) {
+    /*
+     * Random point on a large sphere.
+     */
+
+    const radius =
+      1400 + Math.random() * 1600;
+
+    const theta =
+      Math.random() * Math.PI * 2;
+
+    const phi =
+      Math.acos(
+        2 * Math.random() - 1
+      );
+
+    positions[i * 3] =
+      radius *
+      Math.sin(phi) *
+      Math.cos(theta);
+
+    positions[i * 3 + 1] =
+      radius *
+      Math.cos(phi);
+
+    positions[i * 3 + 2] =
+      radius *
+      Math.sin(phi) *
+      Math.sin(theta);
+  }
+
+  const geometry =
+    new THREE.BufferGeometry();
+
+  geometry.setAttribute(
+    'position',
+    new THREE.BufferAttribute(
+      positions,
+      3,
+    ),
+  );
+
+  const material =
+    new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 1.8,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+    });
+
+  const stars =
+    new THREE.Points(
+      geometry,
+      material,
+    );
+
+  solarStarfieldGroup.add(stars);
+}
+
+createSolarStarfield();
 
 function setSolarStarsVisible(visible) {
   solarStarsVisible = visible;
-  solarSystemWorld.setStarsVisible(visible);
+  solarStarfieldGroup.visible = visible;
 }
 
 
-/*SOLAR ORBIT GROUP
+/*
+ * ---------------------------------------------------------
+ * SOLAR ORBIT GROUP
+ * ---------------------------------------------------------
+ *
  * Decorative orbital paths around the Sun.
  */
 
+const solarOrbitGroup = new THREE.Group();
+
+solarOrbitGroup.visible = solarOrbitsVisible;
+
+solarSystemGroup.add(solarOrbitGroup);
 
 
 /*Approximate orbital eccentricities.
@@ -2075,23 +2220,23 @@ async function loadHistoricalMissionTrajectory(missionId) {
       return;
     }
 
-if (historicalMissionTrajectory) {
-  solarSystemWorld.group.remove(
-    historicalMissionTrajectory,
-  );
+    if (historicalMissionTrajectory) {
+      solarSystemGroup.remove(
+        historicalMissionTrajectory,
+      );
 
-  historicalMissionTrajectory.geometry.dispose();
-  historicalMissionTrajectory.material.dispose();
-}
-
+      historicalMissionTrajectory.geometry.dispose();
+      historicalMissionTrajectory.material.dispose();
+    }
 
     historicalMissionTrajectory = trajectory;
 
     historicalMissionTrajectory.name =
       `mission-${missionId}`;
-solarSystemWorld.group.add(
-  historicalMissionTrajectory,
-);
+
+    solarSystemGroup.add(
+      historicalMissionTrajectory,
+    );
 
     console.log(
       'Historical trajectory successfully added:',
@@ -2191,11 +2336,111 @@ function createHistoricalMissionTrajectory(points) {
 }
 
 /*UPDATE SOLAR SYSTEM*/
-function updateSolarSystemBodies(bodies) {
-  solarSystemWorld.updateBodies(bodies);
 
-  solarSystemBodies =
-    Array.isArray(bodies) ? bodies : [];
+function updateSolarSystemBodies(bodies) {
+  solarSystemBodies = Array.isArray(bodies) ? bodies : [];
+
+  const sun = solarSystemBodies.find((body) => body.id === 'sun');
+
+  if (!sun) {
+    console.warn('Solar System: Sun not available.');
+    return;
+  }
+
+  const activeIds = new Set();
+
+  /*
+   * Create/update every body.
+   */
+
+  for (const body of solarSystemBodies) {
+    activeIds.add(body.id);
+
+    let object = solarSystemObjects.get(body.id);
+
+    /*
+     * Create object if required.
+     */
+
+    if (!object) {
+      object = createSolarSystemBody(body);
+
+      solarSystemObjects.set(body.id, object);
+
+      solarSystemGroup.add(object);
+    }
+
+const label = createSolarBodyLabel(body);
+
+label.position.set(
+  0,
+  (SOLAR_SYSTEM_RADII[body.id] || 2.5) + 5,
+  0,
+);
+
+object.add(label);
+
+solarLabels.set(body.id, label);
+
+label.visible = solarLabelsVisible;
+
+    /*Calculate heliocentric position*/
+
+    const position = getSolarVisualPosition(body, sun);
+
+    object.position.copy(position);
+    object.userData.apiData = body;
+
+    /*Make sure every body is visible.*/
+
+    object.visible = true;
+
+    /* Create orbital path.*/
+
+    if (
+      body.id !== 'sun' &&
+      body.id !== 'moon' &&
+      !solarOrbitGroup.getObjectByName(`orbit-${body.id}`)
+    ) {
+      const orbit = createSolarOrbit(body, sun);
+
+      if (orbit) {
+        orbit.name = `orbit-${body.id}`;
+        solarOrbitGroup.add(orbit);
+      }
+    }
+  }
+
+  /*
+   * Remove stale bodies.
+   */
+
+  for (const [id, object] of solarSystemObjects) {
+    if (!activeIds.has(id)) {
+      solarSystemGroup.remove(object);
+      solarSystemObjects.delete(id);
+    }
+  }
+
+  /*
+   * Remove stale orbital paths.
+   */
+
+  for (const orbit of [...solarOrbitGroup.children]) {
+    const bodyId = orbit.name.replace('orbit-', '');
+
+    if (!activeIds.has(bodyId)) {
+      solarOrbitGroup.remove(orbit);
+      orbit.geometry.dispose();
+      orbit.material.dispose();
+    }
+  }
+
+  /*
+   * Show orbital paths.
+   */
+
+  solarOrbitGroup.visible = solarOrbitsVisible;
 
   console.log(
     `SOLAR SYSTEM: updated ${solarSystemBodies.length} bodies`
@@ -2226,13 +2471,13 @@ function handleSolarPointerMove(event) {
 
   const meshes = [];
 
-  for (const object of solarSystemWorld.getAllBodies().values()) {
-  object.traverse((child) => {
-    if (child.isMesh) {
-      meshes.push(child);
-    }
-  });
-}
+  for (const object of solarSystemObjects.values()) {
+    object.traverse((child) => {
+      if (child.isMesh) {
+        meshes.push(child);
+      }
+    });
+  }
 
   const intersections =
     solarRaycaster.intersectObjects(
@@ -2253,18 +2498,18 @@ function handleSolarPointerMove(event) {
   let object =
     intersections[0].object;
 
- while (
-  object.parent &&
-  !solarSystemWorld.getAllBodies().has(
-    object.userData?.bodyId,
-  )
-) {
-  object = object.parent;
-}
+  while (
+    object.parent &&
+    !solarSystemObjects.has(
+      object.userData?.bodyId,
+    )
+  ) {
+    object = object.parent;
+  }
 
   let bodyObject = null;
 
-  for (const [id, solarObject] of solarSystemWorld.getAllBodies()) {
+  for (const [id, solarObject] of solarSystemObjects) {
     if (
       solarObject === object ||
       solarObject === intersections[0].object ||
@@ -2316,13 +2561,13 @@ function handleSolarPointerClick(event) {
 
   const meshes = [];
 
-for (const object of solarSystemWorld.getAllBodies().values()) {
-  object.traverse((child) => {
-    if (child.isMesh) {
-      meshes.push(child);
-    }
-  });
-}
+  for (const object of solarSystemObjects.values()) {
+    object.traverse((child) => {
+      if (child.isMesh) {
+        meshes.push(child);
+      }
+    });
+  }
 
   const intersections =
     solarRaycaster.intersectObjects(
@@ -2339,9 +2584,8 @@ for (const object of solarSystemWorld.getAllBodies().values()) {
 
   let selected = null;
 
-for (const [id, object] of solarSystemWorld.getAllBodies()) 
-  {
-      let containsHit = false;
+  for (const [id, object] of solarSystemObjects) {
+    let containsHit = false;
 
     object.traverse((child) => {
       if (child === hit) {
@@ -2545,9 +2789,76 @@ const velocityText =
 }
 
 
+function animateSolarSystem() {
+
+  const now = performance.now();
+
+
+  // Planet rotation
+  for (const [id, object] of solarSystemObjects) {
+    const speed =
+      SOLAR_ROTATION_SPEEDS[id] || 0.002;
+
+  object.rotation.y += speed * solarAnimationSpeed;
+
+    // Hover scale
+    const targetScale =
+      object === hoveredSolarBody
+        ? 1.12
+        : 1.0;
+
+    object.scale.x +=
+      (targetScale - object.scale.x) * 0.12;
+
+    object.scale.y +=
+      (targetScale - object.scale.y) * 0.12;
+
+    object.scale.z +=
+      (targetScale - object.scale.z) * 0.12;
+
+    // Earth cloud rotation
+    if (
+      id === 'earth' &&
+      object.userData.cloudLayer
+    ) {
+      object.userData.cloudLayer.rotation.y +=
+        speed * 0.35 * solarAnimationSpeed;
+    }
+  }
+
+  // Moon orbit
+  const earth =
+    solarSystemObjects.get('earth');
+
+  const moon =
+    solarSystemObjects.get('moon');
+
+  if (earth && moon) {
+    const angle =
+      now * MOON_ORBIT_SPEED * solarAnimationSpeed * 0.001;
+
+    moon.position.set(
+      earth.position.x +
+        Math.cos(angle) * MOON_ORBIT_RADIUS,
+
+      earth.position.y +
+        Math.sin(angle * 0.35) * 3,
+
+      earth.position.z +
+        Math.sin(angle) * MOON_ORBIT_RADIUS,
+    );
+  }
+
+  requestAnimationFrame(animateSolarSystem);
+}
+
+animateSolarSystem();
+
+
 /*EARTH VISIBILITY */
 
-/*Earth View:
+/*
+ * Earth View:
  *   Globe ON
  *   Earth intelligence ON
  *
@@ -2679,7 +2990,8 @@ function showEarthView() {
 
     // Unified world:
     // Earth and Solar System remain loaded together.
-solarSystemWorld.setVisible(false);
+    solarSystemGroup.visible = true;
+
     setEarthGlobeVisible(true);
     setEarthDataVisible(true);
 
@@ -2717,7 +3029,8 @@ function showSolarView() {
 
     // Unified world:
     // Earth remains loaded while Solar System is visible.
-    solarSystemWorld.setVisible(true);
+    solarSystemGroup.visible = true;
+
     setEarthGlobeVisible(true);
     setEarthDataVisible(false);
 
@@ -2957,9 +3270,9 @@ function createHistoricalSpacecraftMarker() {
 
     historicalSpacecraftMarker.visible = false;
 
-    solarSystemWorld.group.add(
-    historicalSpacecraftMarker
-);
+    solarSystemGroup.add(
+        historicalSpacecraftMarker
+    );
 
     return historicalSpacecraftMarker;
 }
@@ -3458,7 +3771,7 @@ function showJourneyView(options = {}) {
         // Journey Earth scene
         setEarthGlobeVisible(true);
         setEarthDataVisible(true);
-        solarSystemWorld.setVisible(false);
+        solarSystemGroup.visible = false;
 
         world.controls().enabled = true;
         world.controls().autoRotate =
@@ -3480,7 +3793,8 @@ function showJourneyView(options = {}) {
     // Journey heliocentric / planetary scene
     setEarthGlobeVisible(false);
     setEarthDataVisible(false);
-solarSystemWorld.setVisible(true);
+    solarSystemGroup.visible = true;
+
     world.controls().enabled = true;
     world.controls().autoRotate =
         journeyCamera.phase !== "launch";
@@ -3608,7 +3922,7 @@ function setSolarMode(mode, options = {}) {
 function focusSolarSystem() {
     console.trace("focusSolarSystem() CALLED");
 
-    if (solarSystemWorld.getAllBodies().size === 0) {
+    if (solarSystemObjects.size === 0) {
         console.warn("Solar System: no objects to focus.");
         return;
     }
@@ -3617,7 +3931,7 @@ function focusSolarSystem() {
 
     let maxDistance = 0;
 
-    for (const object of solarSystemWorld.getAllBodies().values()) {
+    for (const object of solarSystemObjects.values()) {
         const distance = object.position.length();
 
         if (Number.isFinite(distance)) {
@@ -3662,7 +3976,7 @@ function transitionJourneyToSolar() {
     // Final Solar System camera position
     let maxDistance = 0;
 
-    for (const object of solarSystemWorld.getAllBodies().values()) {
+    for (const object of solarSystemObjects.values()) {
         const distance = object.position.length();
 
         if (Number.isFinite(distance)) {
@@ -3896,7 +4210,8 @@ if (btnResetSolarView) {
   });
 }
 
-/* SOLAR SYSTEM LOADING */
+/*SOLAR SYSTEM LOADING */
+
 async function loadSolarSystem() {
   try {
     const response = await fetch(SOLAR_SYSTEM_API, {
@@ -3904,31 +4219,35 @@ async function loadSolarSystem() {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Solar System API returned ${response.status}`
-      );
+      throw new Error(`Solar System API returned ${response.status}`);
     }
 
     const data = await response.json();
 
     if (!Array.isArray(data.bodies)) {
-      throw new Error(
-        'Solar System API returned no bodies array'
-      );
+      throw new Error('Solar System API returned no bodies array');
     }
 
     updateSolarSystemBodies(data.bodies);
 
-    console.log(
-      `Solar System: rendered ${data.bodies.length} bodies.`
-    );
+positionGlobeAtSolarEarth();
+
+    console.log(`Solar System: rendered ${data.bodies.length} bodies.`);
+
+    /*If Solar View was selected before the API
+     * finished loading, focus the system now.*/
+if (
+  appState.mode === SOLAR_MODES.SOLAR &&
+  !selectedSolarBody
+) {
+  solarSystemGroup.visible = true;
+  focusSolarSystem();
+}
   } catch (error) {
-    console.error(
-      'Solar System frontend load failed:',
-      error
-    );
+    console.error('Solar System frontend load failed:', error);
   }
 }
+
 /*PUBLIC API */
 
 window.setSolarMode = setSolarMode;
@@ -3948,15 +4267,9 @@ window.solarSystemDebug = function () {
 
   console.log('Bodies:', solarSystemBodies.length);
 
-  console.log(
-  'Objects:',
-  solarSystemWorld.getAllBodies().size
-);
+  console.log('Objects:', solarSystemObjects.size);
 
-  console.log(
-  'Group visible:',
-  solarSystemWorld.group.visible
-);
+  console.log('Group visible:', solarSystemGroup.visible);
 
   console.log('Globe radius:', world.getGlobeRadius());
 
@@ -3964,7 +4277,7 @@ window.solarSystemDebug = function () {
 
   console.log('Camera distance:', world.camera().position.length());
 
-  for (const [id, object] of solarSystemWorld.getAllBodies()) {
+  for (const [id, object] of solarSystemObjects) {
     console.log(id, {
       x: object.position.x,
       y: object.position.y,
@@ -6597,8 +6910,8 @@ window.__debug = {
     },
 
     get solarObjects() {
-    return solarSystemWorld.getAllBodies();
-},
+        return solarSystemObjects;
+    },
 
     get trajectory() {
         return journeyState.trajectory;
