@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import xml.etree.ElementTree as ET
 
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 
 import httpx
@@ -16,6 +16,11 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from solar_system import get_solar_system
+from solar_system import (
+    get_solar_system,
+    _get_body_trajectory_safe,
+    SOLAR_SYSTEM_BODIES,
+)
 
 from mission_trajectories import (
     HISTORICAL_MISSIONS,
@@ -1501,6 +1506,108 @@ async def solar_system_endpoint():
     return await get_solar_system()
 
 
+@app.get("/api/solar-system/orbits")
+async def solar_system_orbits_endpoint():
+    now = datetime.now(timezone.utc)
+
+    orbit_config = {
+        "mercury": {"days": 88, "step": "2 d"},
+        "venus": {"days": 225, "step": "5 d"},
+        "earth": {"days": 365, "step": "5 d"},
+        "mars": {"days": 687, "step": "10 d"},
+        "jupiter": {"days": 4332, "step": "20 d"},
+        "saturn": {"days": 10759, "step": "60 d"},
+        "uranus": {"days": 30687, "step": "180 d"},
+        "neptune": {"days": 60190, "step": "365 d"},
+    }
+
+    heliocentric_trajectories = []
+
+    for body_id, body in SOLAR_SYSTEM_BODIES.items():
+
+        if body_id in ("sun", "moon"):
+            continue
+
+        config = orbit_config.get(body_id)
+
+        if config is None:
+            continue
+
+        half_period = timedelta(
+            days=config["days"] / 2
+        )
+
+        start = now - half_period
+        stop = now + half_period
+
+        # Get the planet trajectory
+        planet_trajectory = await _get_body_trajectory_safe(
+            body_id,
+            body,
+            start,
+            stop,
+            config["step"],
+        )
+
+        if planet_trajectory is None:
+            continue
+
+        # Get Sun trajectory over the SAME window
+        sun_trajectory = await _get_body_trajectory_safe(
+            "sun",
+            SOLAR_SYSTEM_BODIES["sun"],
+            start,
+            stop,
+            config["step"],
+        )
+
+        if sun_trajectory is None:
+            continue
+
+        sun_by_jd = {
+            point["jd"]: point
+            for point in sun_trajectory["points"]
+        }
+
+        points = []
+
+        for point in planet_trajectory["points"]:
+
+            sun_point = sun_by_jd.get(point["jd"])
+
+            if sun_point is None:
+                continue
+
+            points.append({
+                "jd": point["jd"],
+
+                "x": point["x"] - sun_point["x"],
+                "y": point["y"] - sun_point["y"],
+                "z": point["z"] - sun_point["z"],
+
+                "vx": point["vx"] - sun_point["vx"],
+                "vy": point["vy"] - sun_point["vy"],
+                "vz": point["vz"] - sun_point["vz"],
+            })
+
+        heliocentric_trajectories.append({
+            "id": body_id,
+            "name": body["name"],
+            "type": body["type"],
+            "points": points,
+        })
+
+    return {
+        "timestamp": now.isoformat(),
+        "coordinate_system": "ICRF",
+        "reference_plane": "ECLIPTIC",
+        "origin": "SUN",
+        "units": {
+            "position": "AU",
+            "velocity": "AU/day",
+        },
+        "trajectories": heliocentric_trajectories,
+    }
 
 @app.get("/api/ships")
 async def get_ships():

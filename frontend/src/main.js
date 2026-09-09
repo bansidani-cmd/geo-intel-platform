@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import * as satellite from 'satellite.js';
 import { CameraController } from "./core/camera.js";
 import { SolarSystem } from "./world/SolarSystem.js";
+import { EarthWorld } from "./world/EarthWorld.js";
 
 import {
     appState,
@@ -209,6 +210,7 @@ const world = Globe()(globeContainer)
 );
 
 const solarSystemWorld = new SolarSystem();
+const earthWorld = new EarthWorld(world);
 
 solarSystemWorld.initialize(
     world.scene()
@@ -216,7 +218,7 @@ solarSystemWorld.initialize(
 
 window.solarSystemWorld = solarSystemWorld;
 
-
+earthWorld.initialize(world.scene());
 window.world = world;
 
 function resizeGlobe() {
@@ -251,6 +253,31 @@ const SOLAR_MODES = {
     JOURNEY: 'journey',
 };
 
+
+try {
+    const response = await fetch(
+        'http://localhost:8001/api/solar-system/orbits'
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Orbit API returned ${response.status}`
+        );
+    }
+
+    const orbitData =
+        await response.json();
+
+    solarSystemWorld.setOrbitalTrajectories(
+        orbitData.trajectories
+    );
+
+} catch (error) {
+    console.error(
+        'Solar System: failed to load orbital trajectories.',
+        error
+    );
+}
 
 let solarSystemBodies = [];
 let historicalMissionTrajectory = null;
@@ -2564,25 +2591,6 @@ const velocityText =
  * We temporarily override rendering instead.
  */
 
-function setEarthGlobeVisible(visible) {
-  const material = world.globeMaterial();
-
-  if (!material) {
-    return;
-  }
-
-  material.transparent = !visible;
-  material.opacity = visible ? 1 : 0;
-  material.depthWrite = visible;
-
-  world.showAtmosphere(visible);
-
-  world.scene().traverse((obj) => {
-    if (obj.isMesh && obj.material === material) {
-      obj.visible = visible;
-    }
-  });
-}
 
 function setEarthDataVisible(visible) {
   /*PARTICLES
@@ -2680,7 +2688,7 @@ function showEarthView() {
     // Unified world:
     // Earth and Solar System remain loaded together.
 solarSystemWorld.setVisible(false);
-    setEarthGlobeVisible(true);
+   earthWorld.setVisible(true);
     setEarthDataVisible(true);
 
     world.controls().autoRotate = false;
@@ -2718,7 +2726,7 @@ function showSolarView() {
     // Unified world:
     // Earth remains loaded while Solar System is visible.
     solarSystemWorld.setVisible(true);
-    setEarthGlobeVisible(true);
+   earthWorld.setVisible(false);
     setEarthDataVisible(false);
 
     world.controls().enabled = true;
@@ -3456,7 +3464,7 @@ function showJourneyView(options = {}) {
     if (coordinateSystem === "earth-centered") {
 
         // Journey Earth scene
-        setEarthGlobeVisible(true);
+        earthWorld.setVisible(true);
         setEarthDataVisible(true);
         solarSystemWorld.setVisible(false);
 
@@ -3478,7 +3486,7 @@ function showJourneyView(options = {}) {
 
 
     // Journey heliocentric / planetary scene
-    setEarthGlobeVisible(false);
+   earthWorld.setVisible(false);
     setEarthDataVisible(false);
 solarSystemWorld.setVisible(true);
     world.controls().enabled = true;
@@ -3581,15 +3589,7 @@ function setSolarMode(mode, options = {}) {
 
     if (mode === SOLAR_MODES.SOLAR) {
 
-        console.log(
-            'SOLAR MODE: starting historical trajectory load'
-        );
-
         showSolarView();
-
-        loadHistoricalMissionTrajectory(
-            'india-mangalyaan'
-        );
 
         return;
     }
@@ -3799,13 +3799,18 @@ if (btnSolarView) {
 }
 
 if (solarSpeedSlider) {
-  solarSpeedSlider.addEventListener('input', () => {
-    solarAnimationSpeed =
-      Number(solarSpeedSlider.value);
+    solarSpeedSlider.addEventListener(
+        'input',
+        () => {
+            solarSystemWorld.animationSpeed =
+                Number(
+                    solarSpeedSlider.value
+                );
 
-    solarSpeedValue.textContent =
-      `${solarAnimationSpeed.toFixed(1)}×`;
-  });
+            solarSpeedValue.textContent =
+                `${solarSystemWorld.animationSpeed.toFixed(1)}×`;
+        }
+    );
 }
 
 if (btnToggleOrbits) {
@@ -3856,16 +3861,17 @@ if (btnResetSolarView) {
     selectedSolarBody = null;
     hoveredSolarBody = null;
 
-    // Reset animation speed
-    solarAnimationSpeed = 1.0;
+// Reset animation speed
+solarSystemWorld.animationSpeed = 1.0;
 
-    if (solarSpeedSlider) {
-      solarSpeedSlider.value = 1;
-    }
+if (solarSpeedSlider) {
+    solarSpeedSlider.value = "1.0";
+}
 
-    if (solarSpeedValue) {
-      solarSpeedValue.textContent = '1.0×';
-    }
+if (solarSpeedValue) {
+    solarSpeedValue.textContent = "1.0×";
+}
+
 
     // Reset orbits
     setSolarOrbitsVisible(true);

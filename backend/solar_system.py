@@ -4,9 +4,8 @@ import httpx
 from datetime import datetime, timezone, timedelta
 
 
-# =========================================================
 # JPL HORIZONS
-# =========================================================
+
 
 HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
 
@@ -14,7 +13,9 @@ HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
 # simultaneous requests from the same client - keep
 # concurrency modest.
 HORIZONS_MAX_CONCURRENCY = 2
-_horizons_semaphore = asyncio.Semaphore(HORIZONS_MAX_CONCURRENCY)
+_horizons_semaphore = asyncio.Semaphore(
+    HORIZONS_MAX_CONCURRENCY
+)
 
 # Positions barely change minute to minute - cache the
 # whole response instead of re-fetching all 10 bodies
@@ -24,10 +25,18 @@ _solar_system_cache = None
 _solar_system_cache_time = 0.0
 
 
-# =========================================================
-# SOLAR SYSTEM BODIES
-# =========================================================
+ORBIT_CONFIG = {
+    "mercury": {"days": 88, "step": "2 d"},
+    "venus": {"days": 225, "step": "5 d"},
+    "earth": {"days": 365, "step": "5 d"},
+    "mars": {"days": 687, "step": "10 d"},
+    "jupiter": {"days": 4332, "step": "20 d"},
+    "saturn": {"days": 10759, "step": "60 d"},
+    "uranus": {"days": 30687, "step": "180 d"},
+    "neptune": {"days": 60190, "step": "365 d"},
+}
 
+# SOLAR SYSTEM BODIES
 SOLAR_SYSTEM_BODIES = {
     "sun": {
         "name": "Sun",
@@ -82,7 +91,6 @@ SOLAR_SYSTEM_BODIES = {
 }
 
 
-# =========================================================
 # GET ONE BODY POSITION
 # =========================================================
 
@@ -98,7 +106,7 @@ async def get_body_position(
         AU
 
     Velocity:
-        km/s
+        AU/day
 
     Reference:
         ICRF / ecliptic
@@ -113,8 +121,13 @@ async def get_body_position(
 
     stop_time = epoch + timedelta(days=1)
 
-    start_string = epoch.strftime("%Y-%m-%d %H:%M")
-    stop_string = stop_time.strftime("%Y-%m-%d %H:%M")
+    start_string = epoch.strftime(
+        "%Y-%m-%d %H:%M"
+    )
+
+    stop_string = stop_time.strftime(
+        "%Y-%m-%d %H:%M"
+    )
 
     params = {
         "format": "json",
@@ -130,8 +143,6 @@ async def get_body_position(
         "STOP_TIME": f"'{stop_string}'",
         "STEP_SIZE": "'1 d'",
 
-        # AU and days gives us AU/day velocities,
-        # but we will primarily use the position.
         "OUT_UNITS": "'AU-D'",
 
         "REF_PLANE": "'ECLIPTIC'",
@@ -145,7 +156,10 @@ async def get_body_position(
     }
 
     async with _horizons_semaphore:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(
+            timeout=30
+        ) as client:
+
             response = await client.get(
                 HORIZONS_URL,
                 params=params,
@@ -163,21 +177,16 @@ async def get_body_position(
             f"Horizons error: {data['error']}"
         )
 
-    result = data.get("result", "")
+    result = data.get(
+        "result",
+        ""
+    )
 
     if not result:
         raise RuntimeError(
             f"Horizons returned no result for "
             f"body {command}"
         )
-
-    # Horizons vector data lives between
-    #
-    # $$SOE
-    #
-    # and
-    #
-    # $$EOE
 
     if "$$SOE" not in result:
         raise RuntimeError(
@@ -210,13 +219,18 @@ async def get_body_position(
             f"body {command}"
         )
 
-    # -----------------------------------------------------
     # Find the actual CSV vector line.
     #
-    # Horizons may include a date/time field followed by:
+    # Expected layout:
     #
-    # X,Y,Z,VX,VY,VZ
-    # -----------------------------------------------------
+    # JD,
+    # Calendar Date,
+    # X,
+    # Y,
+    # Z,
+    # VX,
+    # VY,
+    # VZ
 
     vector_line = None
 
@@ -228,17 +242,6 @@ async def get_body_position(
 
         if len(parts) >= 8:
             try:
-                # Expected layout:
-                #
-                # JD,
-                # Calendar Date,
-                # X,
-                # Y,
-                # Z,
-                # VX,
-                # VY,
-                # VZ
-
                 float(parts[2])
                 float(parts[3])
                 float(parts[4])
@@ -268,21 +271,240 @@ async def get_body_position(
     }
 
 
-# =========================================================
-# GET ONE BODY, WRAPPED SO A FAILURE DOESN'T ABORT THE REST
-# =========================================================
+# GET BODY TRAJECTORY
 
-async def _get_body_safe(body_id, body, epoch):
+
+async def get_body_trajectory(
+    command: str,
+    start: datetime,
+    stop: datetime,
+    step: str = "5 d",
+):
+    """
+    Get a sampled Solar System body trajectory
+    from JPL Horizons.
+
+    Positions:
+        AU
+
+    Velocity:
+        AU/day
+
+    Reference:
+        ICRF / ecliptic
+
+    Coordinates:
+        Solar-system barycentric (@0)
+    """
+
+    start_string = start.strftime(
+        "%Y-%m-%d %H:%M"
+    )
+
+    stop_string = stop.strftime(
+        "%Y-%m-%d %H:%M"
+    )
+
+    params = {
+        "format": "json",
+        "COMMAND": f"'{command}'",
+        "OBJ_DATA": "'NO'",
+        "MAKE_EPHEM": "'YES'",
+        "EPHEM_TYPE": "'VECTORS'",
+
+        # Solar-system barycenter
+        "CENTER": "'@0'",
+
+        "START_TIME": f"'{start_string}'",
+        "STOP_TIME": f"'{stop_string}'",
+        "STEP_SIZE": f"'{step}'",
+
+        "OUT_UNITS": "'AU-D'",
+
+        "REF_PLANE": "'ECLIPTIC'",
+        "REF_SYSTEM": "'ICRF'",
+
+        "VEC_TABLE": "'2'",
+
+        "CSV_FORMAT": "'YES'",
+    }
+
+    async with _horizons_semaphore:
+        async with httpx.AsyncClient(
+            timeout=60
+        ) as client:
+
+            response = await client.get(
+                HORIZONS_URL,
+                params=params,
+            )
+
+            response.raise_for_status()
+
+            data = response.json()
+
+    if "error" in data:
+        raise RuntimeError(
+            f"Horizons error: {data['error']}"
+        )
+
+    result = data.get(
+        "result",
+        ""
+    )
+
+    if not result:
+        raise RuntimeError(
+            f"Horizons returned no result "
+            f"for body {command}"
+        )
+
+    if "$$SOE" not in result:
+        raise RuntimeError(
+            f"Horizons response contained no "
+            f"$$SOE marker for body {command}"
+        )
+
+    if "$$EOE" not in result:
+        raise RuntimeError(
+            f"Horizons response contained no "
+            f"$$EOE marker for body {command}"
+        )
+
+    vector_section = (
+        result
+        .split("$$SOE", 1)[1]
+        .split("$$EOE", 1)[0]
+        .strip()
+    )
+
+    lines = [
+        line.strip()
+        for line in vector_section.splitlines()
+        if line.strip()
+    ]
+
+    trajectory = []
+
+    for line in lines:
+        parts = [
+            part.strip()
+            for part in line.split(",")
+        ]
+
+        if len(parts) < 8:
+            continue
+
+        try:
+            jd = float(parts[0])
+
+            x = float(parts[2])
+            y = float(parts[3])
+            z = float(parts[4])
+
+            vx = float(parts[5])
+            vy = float(parts[6])
+            vz = float(parts[7])
+
+        except ValueError:
+            continue
+
+        trajectory.append({
+            "jd": jd,
+            "x": x,
+            "y": y,
+            "z": z,
+            "vx": vx,
+            "vy": vy,
+            "vz": vz,
+        })
+
+    if not trajectory:
+        raise RuntimeError(
+            f"No trajectory vectors returned "
+            f"for body {command}"
+        )
+
+    return trajectory
+
+
+# GET ONE BODY TRAJECTORY
+# WRAPPED SO A FAILURE DOESN'T ABORT THE REST
+
+
+async def _get_body_trajectory_safe(
+    body_id,
+    body,
+    start,
+    stop,
+    step_size="5 d",
+):
     max_retries = 3
 
-    for attempt in range(1, max_retries + 1):
+    for attempt in range(
+        1,
+        max_retries + 1
+    ):
+        try:
+            trajectory = await get_body_trajectory(
+                body["command"],
+                start,
+                stop,
+                step_size,
+            )
+
+            print(
+                f"Solar System: loaded trajectory "
+                f"for {body['name']} "
+                f"({len(trajectory)} points)"
+            )
+
+            return {
+                "id": body_id,
+                "name": body["name"],
+                "type": body["type"],
+                "points": trajectory,
+            }
+
+        except Exception as e:
+            print(
+                f"Solar System trajectory ERROR: "
+                f"{body['name']} "
+                f"(attempt "
+                f"{attempt}/{max_retries}) "
+                f"-> {e}"
+            )
+
+            if attempt < max_retries:
+                await asyncio.sleep(1)
+
+    return None
+
+
+# GET ONE BODY
+# WRAPPED SO A FAILURE DOESN'T ABORT THE REST
+
+async def _get_body_safe(
+    body_id,
+    body,
+    epoch
+):
+    max_retries = 3
+
+    for attempt in range(
+        1,
+        max_retries + 1
+    ):
         try:
             position = await get_body_position(
                 body["command"],
                 epoch,
             )
 
-            print(f"Solar System: loaded {body['name']}")
+            print(
+                f"Solar System: loaded "
+                f"{body['name']}"
+            )
 
             return {
                 "id": body_id,
@@ -298,8 +520,11 @@ async def _get_body_safe(body_id, body, epoch):
 
         except Exception as e:
             print(
-                f"Solar System ERROR: {body['name']} "
-                f"(attempt {attempt}/{max_retries}) -> {e}"
+                f"Solar System ERROR: "
+                f"{body['name']} "
+                f"(attempt "
+                f"{attempt}/{max_retries}) "
+                f"-> {e}"
             )
 
             if attempt < max_retries:
@@ -313,22 +538,34 @@ async def _get_body_safe(body_id, body, epoch):
 # =========================================================
 
 async def get_solar_system():
-    global _solar_system_cache, _solar_system_cache_time
+    global _solar_system_cache
+    global _solar_system_cache_time
 
     now_ts = time.time()
 
     if (
         _solar_system_cache is not None
-        and now_ts - _solar_system_cache_time < SOLAR_SYSTEM_CACHE_TTL
+        and
+        now_ts -
+        _solar_system_cache_time
+        <
+        SOLAR_SYSTEM_CACHE_TTL
     ):
         return _solar_system_cache
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     results = await asyncio.gather(
         *(
-            _get_body_safe(body_id, body, now)
-            for body_id, body in SOLAR_SYSTEM_BODIES.items()
+            _get_body_safe(
+                body_id,
+                body,
+                now,
+            )
+            for body_id, body
+            in SOLAR_SYSTEM_BODIES.items()
         )
     )
 
@@ -349,7 +586,11 @@ async def get_solar_system():
         "bodies": bodies,
     }
 
-    if len(bodies) == len(SOLAR_SYSTEM_BODIES):
+    if (
+        len(bodies)
+        ==
+        len(SOLAR_SYSTEM_BODIES)
+    ):
         _solar_system_cache = response
         _solar_system_cache_time = now_ts
 

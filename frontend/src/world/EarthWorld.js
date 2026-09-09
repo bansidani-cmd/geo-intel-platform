@@ -21,8 +21,6 @@ class EarthWorld {
             );
         }
 
-        const globeScene = this.globe.scene();
-
         scene.add(this.group);
 
         this.initialized = true;
@@ -30,6 +28,34 @@ class EarthWorld {
         console.log(
             "EarthWorld initialized."
         );
+    }
+
+    setVisible(visible) {
+        if (!this.globe) {
+            return;
+        }
+
+        const material =
+            this.globe.globeMaterial();
+
+        if (!material) {
+            return;
+        }
+
+        material.transparent = !visible;
+        material.opacity = visible ? 1 : 0;
+        material.depthWrite = visible;
+
+        this.globe.showAtmosphere(visible);
+
+        this.globe.scene().traverse((obj) => {
+            if (
+                obj.isMesh &&
+                obj.material === material
+            ) {
+                obj.visible = visible;
+            }
+        });
     }
 
     getPosition() {
