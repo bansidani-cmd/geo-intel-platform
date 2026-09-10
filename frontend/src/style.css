@@ -598,9 +598,17 @@ body.solar-mode #trackListPanel,
 body.solar-mode #healthPanel {
   display: none !important;
 }
+body.solar-transition #healthPanel,
+body.solar-transition #legend {
+    display: none !important;
+}
 
 body:not(.solar-mode) #solarControls {
   display: none !important;
+}
+
+#solarControls {
+    display: none !important;
 }
 
 .solar-info-scale {

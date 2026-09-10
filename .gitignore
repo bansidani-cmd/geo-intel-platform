@@ -15,3 +15,6 @@ Thumbs.db
 # Env files (never commit secrets/API keys)
 .env
 *.env
+.env
+.env*
+!.env.example

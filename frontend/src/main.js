@@ -2675,75 +2675,170 @@ function setEarthDataVisible(visible) {
     renderTrackList();
   }
 }
-
-/* EARTH VIEW */
+//Earth View 
 function showEarthView() {
+    // DO NOT change appState.mode yet.
 
-    setState((state) => {
-        state.mode = SOLAR_MODES.EARTH;
-    });
+    // Keep Solar visually active initially.
+    solarSystemWorld.setVisible(true);
 
-    document.body.classList.remove('solar-mode');
+    // Earth is hidden.
+    earthWorld.setVisible(false);
 
-    // Unified world:
-    // Earth and Solar System remain loaded together.
-solarSystemWorld.setVisible(false);
-   earthWorld.setVisible(true);
-    setEarthDataVisible(true);
+    // Earth data stays OFF.
+    setEarthDataVisible(false);
 
-    world.controls().autoRotate = false;
     world.controls().enabled = false;
+    world.controls().autoRotate = false;
 
- const earthTarget = getEarthCameraTarget();
+    const earthTarget =
+        new THREE.Vector3(0, 0, 0);
 
-cameraController.transitionTo(
-    earthTarget.clone().add(
-        new THREE.Vector3(0, 0, WORLD.camera.earthViewDistance)
-    ),
-    earthTarget,
-    1200,
-    () => {
-        world.controls().enabled = true;
-        world.controls().autoRotate = true;
-        world.controls().autoRotateSpeed = 0.25;
-    }
-);
+    const earthPosition =
+        new THREE.Vector3(
+            0,
+            0,
+            WORLD.camera.earthViewDistance
+        );
 
-    console.log('Solar Mode: EARTH');
+    cameraController.transitionCinematic(
+        earthPosition,
+        earthTarget,
+        {
+            duration: 4200,
+            zoomOutDistance: 500,
+
+            // --------------------------------
+            // PAN START
+            // --------------------------------
+            onPanStart: () => {
+
+                // Start removing Solar.
+                solarSystemWorld.setVisible(false);
+
+                // Earth is still hidden.
+                earthWorld.setVisible(false);
+
+                // Earth data remains hidden.
+                setEarthDataVisible(false);
+            },
+
+            // --------------------------------
+            // ZOOM IN
+            // --------------------------------
+            onZoomInStart: () => {
+
+                // Now begin revealing Earth.
+                earthWorld.fadeIn(700);
+
+                // Still no Earth data.
+                setEarthDataVisible(false);
+            },
+
+            // COMPLETE
+            
+            onComplete: () => {
+
+                solarSystemWorld.setVisible(false);
+
+                earthWorld.setVisible(true);
+
+                // Earth is now fully established.
+                setEarthDataVisible(true);
+
+                // NOW switch logical mode.
+                setState((state) => {
+                    state.mode =
+                        SOLAR_MODES.EARTH;
+                });
+
+                document.body.classList.remove(
+                    'solar-mode'
+                );
+
+                world.controls().enabled = true;
+                world.controls().autoRotate = true;
+                world.controls().autoRotateSpeed = 0.25;
+            }
+        }
+    );
+
+    console.log('Transitioning → EARTH');
 }
 
 /* SOLAR VIEW */
 function showSolarView() {
 
-    setState((state) => {
-        state.mode = SOLAR_MODES.SOLAR;
-    });
-
-    document.body.classList.add('solar-mode');
+  document.body.classList.add('solar-transition');
+    // DON'T change appState.mode yet.
+    // DON'T change solar-mode class yet.
 
     selectedSolarBody = null;
 
-    // Unified world:
-    // Earth remains loaded while Solar System is visible.
-    solarSystemWorld.setVisible(true);
-   earthWorld.setVisible(false);
-    setEarthDataVisible(false);
+    // Earth remains visible initially.
+    earthWorld.setVisible(true);
 
-    world.controls().enabled = true;
+    // Solar starts hidden.
+    solarSystemWorld.setVisible(false);
+
+    // Earth data remains visible during the
+    // initial zoom-out portion.
+    setEarthDataVisible(true);
+
+    world.controls().enabled = false;
     world.controls().autoRotate = false;
 
-    // Smoothly move from Earth toward the Solar System.
-    cameraController.transitionTo(
+    const solarTarget =
+        new THREE.Vector3(0, 0, 0);
+
+    const solarPosition =
         new THREE.Vector3(
             WORLD.camera.solarViewDistance * 0.72,
             WORLD.camera.solarViewDistance * 0.60,
             WORLD.camera.solarViewDistance * 0.72
-        ),
-        new THREE.Vector3(0, 0, 0),
-        1800
+        );
+
+    cameraController.transitionCinematic(
+        solarPosition,
+        solarTarget,
+        {
+            duration: 4200,
+            zoomOutDistance: 500,
+
+            onPanStart: () => {
+
+                // Earth data disappears FIRST.
+                setEarthDataVisible(false);
+
+                // Solar now enters.
+                solarSystemWorld.setVisible(true);
+
+                earthWorld.fadeOut(650);
+            },
+
+            onZoomInStart: () => {
+
+                // Earth is already gone.
+                earthWorld.setVisible(false);
+            },
+
+            onComplete: () => {
+    solarSystemWorld.setVisible(true);
+
+    document.body.classList.add('solar-mode');
+    document.body.classList.remove('solar-transition');
+
+    setState((state) => {
+        state.mode = SOLAR_MODES.SOLAR;
+    });
+
+    world.controls().enabled = true;
+    world.controls().autoRotate = false;
+}
+        }
     );
 
-    console.log('Solar Mode: SOLAR');
+    console.log('Transitioning → SOLAR');
 }
 
 // CENTRALIZED JOURNEY STATE
@@ -3453,53 +3548,96 @@ async function loadMissionTrajectory(missionId) {
 
 
 /* JOURNEY VIEW */
-
 function showJourneyView(options = {}) {
+
     setState((state) => {
         state.mode = SOLAR_MODES.JOURNEY;
     });
 
-    const coordinateSystem = journeyState.coordinateSystem;
+    const coordinateSystem =
+        journeyState.coordinateSystem;
 
+    world.controls().enabled = false;
+    world.controls().autoRotate = false;
+
+    /*
+     * EARTH-CENTERED JOURNEY
+     */
     if (coordinateSystem === "earth-centered") {
 
-        // Journey Earth scene
         earthWorld.setVisible(true);
         setEarthDataVisible(true);
         solarSystemWorld.setVisible(false);
 
-        world.controls().enabled = true;
-        world.controls().autoRotate =
-        journeyCamera.phase !== "launch"; 
-        // Only position camera when entering Earth scene
+        const journeyEarthTarget =
+            new THREE.Vector3(0, 0, 0);
+
+        /*
+         * If we are entering Journey from Solar,
+         * smoothly return to the Earth first.
+         */
         if (options.resetCamera !== false) {
-    if (journeyCamera.phase !== "launch") {
-        world.pointOfView(
-            { lat: 20, lng: 30, altitude: 2.5 },
-            1000
-        );
-    }
-}
+
+            const journeyEarthPosition =
+                journeyEarthTarget.clone().add(
+                    new THREE.Vector3(
+                        0,
+                        0,
+                        WORLD.camera.earthViewDistance
+                    )
+                );
+
+            cameraController.transitionTo(
+                journeyEarthPosition,
+                journeyEarthTarget,
+                1600,
+                () => {
+
+                    world.controls().enabled = true;
+
+                    world.controls().autoRotate =
+                        journeyCamera.phase !== "launch";
+
+                }
+            );
+
+        } else {
+
+            world.controls().enabled = true;
+
+            world.controls().autoRotate =
+                journeyCamera.phase !== "launch";
+
+        }
     }
 
+    /*
+     * HELIOCENTRIC / PLANETARY JOURNEY
+     */
     else {
 
+        earthWorld.setVisible(false);
+        setEarthDataVisible(false);
+        solarSystemWorld.setVisible(true);
 
-    // Journey heliocentric / planetary scene
-   earthWorld.setVisible(false);
-    setEarthDataVisible(false);
-solarSystemWorld.setVisible(true);
-    world.controls().enabled = true;
-    world.controls().autoRotate =
-        journeyCamera.phase !== "launch";
+        /*
+         * Only reset if explicitly requested.
+         *
+         * Otherwise preserve the current camera
+         * position. This is important when entering
+         * Journey from Solar mode.
+         */
+        if (options.resetCamera === true) {
 
-    // Only reset the camera when explicitly requested.
-    // Journey should not automatically frame the entire
-    // Solar System and cause a large camera jump.
-    if (options.resetCamera === true) {
-        focusJourneySolarSystem();
-    }
+            focusJourneySolarSystem();
 
+        } else {
+
+            world.controls().enabled = true;
+            world.controls().autoRotate =
+                journeyCamera.phase !== "launch";
+
+        }
     }
 
     if (typeof options.onStart === 'function') {
@@ -3511,7 +3649,6 @@ solarSystemWorld.setVisible(true);
         coordinateSystem
     );
 }
-
 
 /* JOURNEY SOLAR CAMERA */
 
@@ -6426,7 +6563,6 @@ async function loadChokepointRisk() {
 }
 
 /*HEALTH PANEL */
-
 const LAYER_LABELS = {
   aircraft: 'Aircraft',
   ships: 'Ships',
